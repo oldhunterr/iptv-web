@@ -22,6 +22,7 @@ import { CategorySidebar } from "@/components/catalog/CategorySidebar";
 import { SearchFilterHeader } from "@/components/catalog/SearchFilterHeader";
 import { VirtualizedGrid } from "@/components/catalog/VirtualizedGrid";
 import { SeriesDetailsModal } from "@/components/series/SeriesDetailsModal";
+import { MovieDetailsModal } from "@/components/movies/MovieDetailsModal";
 import { VideoPlayer } from "@/components/player/VideoPlayer";
 import { Play, Trash2, Loader2, Sparkles } from "lucide-react";
 
@@ -60,6 +61,7 @@ export default function Home() {
 
   // Modals state
   const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [selectedMovie, setSelectedMovie] = useState<CatalogItem | null>(null);
   const [playingMedia, setPlayingMedia] = useState<PlayingMediaState | null>(null);
 
   // Sync Storage (Favorites / History)
@@ -172,19 +174,25 @@ export default function Home() {
         containerExtension: "m3u8",
       });
     } else if (item.type === "movies" || item.type === "vod") {
-      const sId = item.stream_id ?? item.id;
-      const ext = item.container_extension || "mp4";
-      const url = getStreamUrl("movie", sId, ext);
-      setPlayingMedia({
-        src: url,
-        title: item.name || item.title || "Movie",
-        itemKey: `movies_${sId}`,
-        streamId: sId,
-        section: "movies",
-        poster: item.stream_icon || item.poster,
-        containerExtension: ext,
-      });
+      setSelectedMovie(item);
     }
+  };
+
+  const handlePlayMovie = (item: CatalogItem) => {
+    const sId = item.stream_id ?? item.id;
+    const ext = item.container_extension || "mp4";
+    const url = getStreamUrl("movie", sId, ext);
+    setPlayingMedia({
+      src: url,
+      title: item.name || item.title || "Movie",
+      itemKey: `movies_${sId}`,
+      streamId: sId,
+      section: "movies",
+      poster: item.stream_icon || item.poster,
+      containerExtension: ext,
+      tmdbId: item.tmdb_id || item.info?.tmdb_id,
+    });
+    setSelectedMovie(null);
   };
 
   // Play Episode from Series Details Modal
@@ -356,6 +364,14 @@ export default function Home() {
         isOpen={!!selectedSeries}
         onClose={() => setSelectedSeries(null)}
         onPlayEpisode={handlePlayEpisode}
+      />
+
+      {/* Movie Details Modal */}
+      <MovieDetailsModal
+        movie={selectedMovie}
+        isOpen={!!selectedMovie}
+        onClose={() => setSelectedMovie(null)}
+        onPlay={handlePlayMovie}
       />
 
       {/* Video Player Modal / View */}
