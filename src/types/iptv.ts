@@ -170,6 +170,7 @@ export interface CatalogItem {
   poster?: string;
   category_id: string;
   rating?: string | number;
+  rating_5based?: number | string;
   added?: string;
   container_extension?: string;
   plot?: string;
@@ -179,6 +180,13 @@ export interface CatalogItem {
   series_id?: string | number;
   stream_icon?: string;
   cover?: string;
+  tmdb_id?: string | number;
+  info?: any;
+  cast?: string;
+  director?: string;
+  releaseDate?: string;
+  release_date?: string;
+  backdrop_path?: string[] | string;
   raw?: LiveChannel | VodMovie | Series;
 }
 
