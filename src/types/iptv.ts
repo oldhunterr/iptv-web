@@ -207,6 +207,7 @@ export interface WatchHistoryItem {
   section: "live" | "movies" | "series";
   title: string;
   poster?: string;
+  backdrop?: string;
   lastPosition: number;
   duration: number;
   updatedAt: number;

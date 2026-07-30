@@ -33,6 +33,7 @@ interface PlayingMediaState {
   streamId: string | number;
   section: "live" | "movies" | "series";
   poster?: string;
+  backdrop?: string;
   containerExtension?: string;
   tvdbId?: string | number;
   tmdbId?: string | number;
@@ -209,7 +210,8 @@ export default function Home() {
       itemKey,
       streamId: episode.id,
       section: "series",
-      poster: episode.info?.movie_image || episode.info?.cover_big || (episode as any).cover_big || series.cover,
+      poster: series.cover || (series as any).cover_big,
+      backdrop: episode.info?.movie_image || episode.info?.cover_big || (episode as any).cover_big,
       containerExtension: ext,
       tvdbId: (series as any).tvdb_id || (episode.info as any)?.tvdb_id,
       tmdbId: (series as any).tmdb_id || (episode.info as any)?.tmdb_id,
@@ -230,6 +232,7 @@ export default function Home() {
       streamId: hItem.streamId || hItem.id,
       section: hItem.section,
       poster: hItem.poster,
+      backdrop: hItem.backdrop,
       containerExtension: hItem.containerExtension || "mp4",
       tvdbId: hItem.tvdbId,
       seasonNum: hItem.seasonNum,
@@ -326,12 +329,18 @@ export default function Home() {
                           </button>
                         </div>
                       </div>
-                      <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
-                        <div>
+                      <div className="flex-1 p-3 flex flex-col justify-between min-w-0 relative">
+                        {h.backdrop && (
+                          <div 
+                            className="absolute inset-0 bg-cover bg-center opacity-20 pointer-events-none" 
+                            style={{ backgroundImage: `url(${h.backdrop})` }}
+                          />
+                        )}
+                        <div className="relative z-10">
                           <h4 className="text-sm font-semibold text-white truncate">{h.title}</h4>
                           <p className="text-xs text-cyan-400 mt-0.5">{percent}% watched</p>
                         </div>
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60 relative z-10">
                           <button
                             onClick={() => handlePlayHistoryItem(h)}
                             className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
@@ -387,6 +396,7 @@ export default function Home() {
             streamId={playingMedia.streamId}
             section={playingMedia.section}
             poster={playingMedia.poster}
+            backdrop={playingMedia.backdrop}
             containerExtension={playingMedia.containerExtension}
             tvdbId={playingMedia.tvdbId}
             tmdbId={playingMedia.tmdbId}

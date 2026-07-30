@@ -15,6 +15,7 @@ export interface VideoPlayerProps {
   streamId: string | number;
   section: "live" | "movies" | "series";
   poster?: string;
+  backdrop?: string;
   containerExtension?: string;
   tvdbId?: string | number;
   tmdbId?: string | number;
@@ -33,6 +34,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   streamId,
   section,
   poster,
+  backdrop,
   containerExtension = "mp4",
   tvdbId,
   tmdbId,
@@ -162,6 +164,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           id: streamId,
           section,
           title,
+          backdrop,
           poster,
           lastPosition: Math.floor(video.currentTime),
           duration: Math.floor(video.duration),
