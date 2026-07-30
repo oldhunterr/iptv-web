@@ -16,12 +16,12 @@ const ALLOWED_ACTIONS = new Set([
 
 // Configurable TTLs in milliseconds per action
 const ACTION_TTLS: Record<string, number> = {
-  get_live_categories: 3600_000,   // 1 hour
-  get_vod_categories: 3600_000,    // 1 hour
-  get_series_categories: 3600_000, // 1 hour
-  get_live_streams: 600_000,       // 10 minutes
-  get_vod_streams: 600_000,        // 10 minutes
-  get_series: 600_000,             // 10 minutes
+  get_live_categories: 24 * 60 * 60 * 1000,
+  get_live_streams: 24 * 60 * 60 * 1000,
+  get_vod_categories: 24 * 60 * 60 * 1000,
+  get_vod_streams: 24 * 60 * 60 * 1000,
+  get_series_categories: 24 * 60 * 60 * 1000,
+  get_series: 24 * 60 * 60 * 1000,
   get_series_info: 1800_000,       // 30 minutes
   get_vod_info: 1800_000,          // 30 minutes
   get_simple_data_table: 1800_000, // 30 minutes
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     const upstreamUrl = buildUpstreamPlayerUrl(action, extraParams);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     let upstreamRes: Response;
     try {

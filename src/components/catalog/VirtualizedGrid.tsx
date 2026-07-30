@@ -13,6 +13,12 @@ interface VirtualizedGridProps {
 export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelectItem }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(5);
+  const [visibleCount, setVisibleCount] = useState(120);
+
+  // Reset visible items when the underlying list changes (e.g., search, category change)
+  useEffect(() => {
+    setVisibleCount(120);
+  }, [items]);
 
   // Dynamic grid column calculation based on parent container width
   useEffect(() => {
@@ -32,7 +38,8 @@ export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelec
     return () => observer.disconnect();
   }, []);
 
-  const rowCount = Math.ceil(items.length / columns);
+  const displayedItems = items.slice(0, visibleCount);
+  const rowCount = Math.ceil(displayedItems.length / columns);
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
@@ -44,6 +51,16 @@ export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelec
     },
     overscan: 2,
   });
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    // Load more when user scrolls within 800px of the bottom
+    if (scrollHeight - scrollTop - clientHeight < 800) {
+      if (visibleCount < items.length) {
+        setVisibleCount((prev) => Math.min(prev + 120, items.length));
+      }
+    }
+  };
 
   if (items.length === 0) {
     return (
@@ -57,6 +74,7 @@ export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelec
   return (
     <div
       ref={parentRef}
+      onScroll={handleScroll}
       data-testid="virtualized-grid-container"
       className="flex-1 overflow-y-auto p-4 select-none"
     >
@@ -69,7 +87,7 @@ export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelec
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const startIndex = virtualRow.index * columns;
-          const rowItems = items.slice(startIndex, startIndex + columns);
+          const rowItems = displayedItems.slice(startIndex, startIndex + columns);
 
           return (
             <div

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildUpstreamStreamUrl } from "@/lib/xtream-client";
 
+export const dynamic = 'force-dynamic';
+
 const VALID_TYPES = new Set(["live", "movie", "series"]);
 
 export async function GET(request: NextRequest) {

@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 export interface CacheEntry<T = any> {
   value: T;
   expiresAt: number;
@@ -19,10 +22,24 @@ export class CacheEngine {
   private defaultTtlMs: number;
   private hits = 0;
   private misses = 0;
+  private cacheDir: string;
 
   constructor(maxSize: number = 5000, defaultTtlMs: number = 300_000) {
     this.maxSize = maxSize;
     this.defaultTtlMs = defaultTtlMs;
+    this.cacheDir = path.join(process.cwd(), '.cache', 'iptv_server');
+    try {
+      if (!fs.existsSync(this.cacheDir)) {
+        fs.mkdirSync(this.cacheDir, { recursive: true });
+      }
+    } catch (e) {
+      console.error("Failed to create cache directory", e);
+    }
+  }
+
+  private getFilePath(key: string): string {
+    const safeKey = key.replace(/[^a-z0-9_-]/gi, '_');
+    return path.join(this.cacheDir, `${safeKey}.json`);
   }
 
   /**
@@ -38,26 +55,53 @@ export class CacheEngine {
       this.evictOne();
     }
 
-    this.store.set(key, {
+    const entry = {
       value,
       expiresAt,
       createdAt: now,
       ttlMs: effectiveTtl,
-    });
+    };
+
+    this.store.set(key, entry);
+
+    // Persist to disk
+    try {
+      fs.writeFileSync(this.getFilePath(key), JSON.stringify(entry));
+    } catch (e) {
+      console.error("Failed to write cache to disk", e);
+    }
   }
 
   /**
    * Get value by key. Returns undefined if expired or missing.
    */
   public get<T>(key: string): T | undefined {
-    const entry = this.store.get(key);
+    let entry = this.store.get(key);
+
+    if (!entry) {
+      // Try to recover from disk
+      try {
+        const filePath = this.getFilePath(key);
+        if (fs.existsSync(filePath)) {
+          const fileData = fs.readFileSync(filePath, 'utf8');
+          const parsed = JSON.parse(fileData) as CacheEntry;
+          if (parsed && parsed.expiresAt) {
+            entry = parsed;
+            this.store.set(key, entry); // Load back into memory
+          }
+        }
+      } catch (e) {
+        // Disk miss or parse error
+      }
+    }
+
     if (!entry) {
       this.misses++;
       return undefined;
     }
 
     if (entry.expiresAt > 0 && Date.now() >= entry.expiresAt) {
-      this.store.delete(key);
+      this.delete(key);
       this.misses++;
       return undefined;
     }

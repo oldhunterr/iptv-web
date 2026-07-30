@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X, Star, Heart, Play } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
-import { cleanTitle } from "@/lib/tmdb";
+import { cleanTitle } from "@/lib/formatters";
 
 interface MovieDetailsModalProps {
   movie: CatalogItem | null;
@@ -134,7 +134,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     movie.stream_icon ||
     movie.poster;
     
-  const title = movie.name || movie.title || "Unknown Movie";
+  const rawTitle = movie.name || movie.title || "Unknown Movie";
+  const { title } = cleanTitle(rawTitle);
   const cover = movie.stream_icon || movie.cover || movie.poster || infoObj.cover_big;
   const rating = movie.rating || movie.rating_5based || infoObj.rating;
   const genre = movie.genre || infoObj.genre;

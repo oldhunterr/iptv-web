@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Play, Star, Heart, Tv, Film, Check } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite, getWatchProgress, getSeriesProgress } from "@/lib/storage";
+import { cleanTitle } from "@/lib/formatters";
 
 interface ItemCardProps {
   item: CatalogItem;
@@ -22,7 +23,8 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
   );
   const [imgError, setImgError] = useState(false);
 
-  const title = item.name || item.title || "Untitled";
+  const rawTitle = item.name || item.title || "Untitled";
+  const { title } = cleanTitle(rawTitle);
   let posterUrl: string | undefined = undefined;
   let rating: string | undefined = undefined;
 

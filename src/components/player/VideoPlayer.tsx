@@ -48,6 +48,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const mpegtsRef = useRef<any>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -75,7 +76,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const video = videoRef.current;
     if (!video || !src) return;
 
-    const isHls = src.includes(".m3u8") || section === "live" || containerExtension === "m3u8";
+    const isHls = src.includes(".m3u8") || containerExtension === "m3u8";
+    const isTs = src.includes(".ts") || containerExtension === "ts";
 
     if (isHls && Hls.isSupported()) {
       if (hlsRef.current) {
@@ -110,6 +112,38 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           }
         }
       });
+    } else if (isTs) {
+      import("mpegts.js").then((mpegtsModule) => {
+        const mpegts = mpegtsModule.default || mpegtsModule;
+        if (!mpegts.isSupported()) {
+          video.src = src;
+          if (autoPlay) {
+            video.play().catch((e) => console.warn("Autoplay blocked:", e));
+          }
+          return;
+        }
+        
+        if (mpegtsRef.current) {
+          mpegtsRef.current.destroy();
+        }
+        const player = mpegts.createPlayer({
+          type: 'mpegts',
+          isLive: section === 'live',
+          url: src,
+        });
+        mpegtsRef.current = player;
+        player.attachMediaElement(video);
+        player.load();
+        if (autoPlay) {
+          const playPromise = player.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((e: any) => console.warn("Autoplay blocked:", e));
+          }
+        }
+      }).catch(err => {
+        console.error("Failed to load mpegts.js", err);
+        video.src = src;
+      });
     } else {
       video.src = src;
       if (autoPlay) {
@@ -121,6 +155,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
+      }
+      if (mpegtsRef.current) {
+        mpegtsRef.current.destroy();
+        mpegtsRef.current = null;
       }
     };
   }, [src, section, containerExtension, autoPlay]);
@@ -164,8 +202,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           id: streamId,
           section,
           title,
-          backdrop,
           poster,
+          backdrop,
           lastPosition: Math.floor(video.currentTime),
           duration: Math.floor(video.duration),
           streamUrl: src,
@@ -184,7 +222,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       clearInterval(intervalId);
       saveProgress();
     };
-  }, [itemKey, streamId, section, title, poster, src, containerExtension, seriesId, seasonNum, episodeNum, tvdbId]);
+  }, [itemKey, streamId, section, title, poster, backdrop, src, containerExtension, seriesId, seasonNum, episodeNum, tvdbId]);
 
   // Controls auto-hide on mouse inactivity
   const handleMouseMove = () => {
@@ -200,10 +238,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Fullscreen change listener
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(
+        !!(
+          document.fullscreenElement ||
+          (document as any).webkitFullscreenElement ||
+          (document as any).mozFullScreenElement ||
+          (document as any).msFullscreenElement
+        )
+      );
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+    };
   }, []);
 
   // Keyboard Shortcuts Handler
@@ -298,13 +351,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   };
 
-  const toggleFullscreen = () => {
-    const container = containerRef.current;
+  const toggleFullscreen = async () => {
+    const container = containerRef.current as any;
+    const video = videoRef.current as any;
     if (!container) return;
-    if (!document.fullscreenElement) {
-      container.requestFullscreen().catch((err) => console.error("Fullscreen error:", err));
+
+    const isFullscreen =
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement;
+
+    if (!isFullscreen) {
+      try {
+        if (container.requestFullscreen) {
+          await container.requestFullscreen();
+        } else if (container.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        } else if (container.mozRequestFullScreen) {
+          container.mozRequestFullScreen();
+        } else if (container.msRequestFullscreen) {
+          container.msRequestFullscreen();
+        } else if (video && video.webkitEnterFullscreen) {
+          // Fallback for iOS Safari which only allows fullscreen on video elements
+          video.webkitEnterFullscreen();
+        }
+      } catch (err) {
+        console.error("Container fullscreen failed, trying fallback:", err);
+        if (video) {
+          try {
+            if (video.requestFullscreen) {
+              await video.requestFullscreen();
+            } else if (video.webkitEnterFullscreen) {
+              video.webkitEnterFullscreen();
+            }
+          } catch (fallbackErr) {
+            console.error("Fallback fullscreen also failed:", fallbackErr);
+          }
+        }
+      }
     } else {
-      document.exitFullscreen().catch((err) => console.error("Exit fullscreen error:", err));
+      const doc = document as any;
+      try {
+        if (doc.exitFullscreen) {
+          await doc.exitFullscreen();
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen();
+        } else if (doc.mozCancelFullScreen) {
+          doc.mozCancelFullScreen();
+        } else if (doc.msExitFullscreen) {
+          doc.msExitFullscreen();
+        }
+      } catch (err) {
+        console.error("Exit fullscreen error:", err);
+      }
     }
   };
 

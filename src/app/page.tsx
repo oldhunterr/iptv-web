@@ -117,8 +117,15 @@ export default function Home() {
       setIsLoading(false);
       return;
     }
+
+    // Client-side caching: Prevent redundant network fetches when switching tabs
+    // The data is retained in state, so we only fetch if the array is empty.
+    if (activeSection === "live" && liveStreams.length > 0) return;
+    if (activeSection === "movies" && vodStreams.length > 0) return;
+    if (activeSection === "series" && seriesList.length > 0) return;
+
     loadSectionData();
-  }, [activeSection, loadSectionData]);
+  }, [activeSection, loadSectionData, liveStreams.length, vodStreams.length, seriesList.length]);
 
   // Current active categories array
   const currentCategories = useMemo(() => {
@@ -164,7 +171,7 @@ export default function Home() {
       setSelectedSeries((item.raw as Series) || { ...item, name: item.name || item.title || "Series", series_id: item.series_id || item.id, category_id: item.category_id });
     } else if (item.type === "live") {
       const sId = item.stream_id ?? item.id;
-      const url = getStreamUrl("live", sId, "m3u8");
+      const url = getStreamUrl("live", sId, "ts");
       setPlayingMedia({
         src: url,
         title: item.name || item.title || "Live Stream",
@@ -172,7 +179,7 @@ export default function Home() {
         streamId: sId,
         section: "live",
         poster: item.stream_icon || item.poster,
-        containerExtension: "m3u8",
+        containerExtension: "ts",
       });
     } else if (item.type === "movies" || item.type === "vod") {
       setSelectedMovie(item);
@@ -332,8 +339,12 @@ export default function Home() {
                       <div className="flex-1 p-3 flex flex-col justify-between min-w-0 relative">
                         {h.backdrop && (
                           <div 
-                            className="absolute inset-0 bg-cover bg-center opacity-20 pointer-events-none" 
-                            style={{ backgroundImage: `url(${h.backdrop})` }}
+                            className="absolute inset-0 bg-cover bg-center opacity-30 pointer-events-none" 
+                            style={{ 
+                              backgroundImage: `url(${h.backdrop})`,
+                              maskImage: 'linear-gradient(to right, transparent, black 30%, black 100%)',
+                              WebkitMaskImage: 'linear-gradient(to right, transparent, black 30%, black 100%)'
+                            }}
                           />
                         )}
                         <div className="relative z-10">

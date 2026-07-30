@@ -5,7 +5,7 @@ import { X, Star, Volume2, VolumeX, Heart, Loader2 } from "lucide-react";
 import { Series, SeriesInfo, Episode, normalizeCatalogItem } from "@/types/iptv";
 import { fetchSeriesInfo, getThemeAudioUrl } from "@/lib/api-client";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
-import { cleanTitle } from "@/lib/tmdb";
+import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
 
 interface SeriesDetailsModalProps {
@@ -394,7 +394,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
             )}
             <div className="flex-1 min-w-0 pb-4">
               <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight drop-shadow-lg truncate">
-                {series.name}
+                {cleanTitle(series.name).title}
               </h2>
               <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-slate-300 font-medium flex-wrap">
                 {series.rating && (

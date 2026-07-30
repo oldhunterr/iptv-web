@@ -16,8 +16,9 @@ export function getStreamUrl(
   containerExt: string = "mp4"
 ): string {
   let ext = containerExt;
-  if (type === "live" && (!ext || ext === "mp4")) {
-    ext = "m3u8";
+  // Fall back to ts for live streams if no extension is provided
+  if (type === "live" && !ext) {
+    ext = "ts";
   }
   return `${BASE_PROXY_URL}/stream?type=${type}&stream_id=${streamId}&container=${ext}`;
 }
