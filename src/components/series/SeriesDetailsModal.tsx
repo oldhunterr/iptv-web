@@ -162,23 +162,52 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted || !data) return;
-        if (data.external_ids?.tvdb_id && !tvdbId) {
-          setTvdbId(data.external_ids.tvdb_id);
-        }
-        if (data.backdrop_path) {
-          const bgUrl = data.backdrop_path.startsWith("http")
-            ? data.backdrop_path
-            : `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
-          setHeroBackdrop(bgUrl);
-        }
-        if (data.poster_path) {
-          const posterUrl = data.poster_path.startsWith("http")
-            ? data.poster_path
-            : `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-          setTmdbPoster(posterUrl);
-        }
-        if (data.credits) {
-          setTmdbCredits(data.credits);
+
+        const needsFallback = userLang !== "en-US" && (!data.overview || data.overview.trim() === "" || !data.poster_path);
+
+        const applyData = (mainData: any, fallbackData?: any) => {
+          if (mainData.external_ids?.tvdb_id && !tvdbId) {
+            setTvdbId(mainData.external_ids.tvdb_id);
+          } else if (fallbackData?.external_ids?.tvdb_id && !tvdbId) {
+            setTvdbId(fallbackData.external_ids.tvdb_id);
+          }
+
+          const backdrop = mainData.backdrop_path || fallbackData?.backdrop_path;
+          const poster = mainData.poster_path || fallbackData?.poster_path;
+          const credits = mainData.credits || fallbackData?.credits;
+
+          if (backdrop) {
+            const bgUrl = backdrop.startsWith("http")
+              ? backdrop
+              : `https://image.tmdb.org/t/p/original${backdrop}`;
+            setHeroBackdrop(bgUrl);
+          }
+          
+          if (poster) {
+            const posterUrl = poster.startsWith("http")
+              ? poster
+              : `https://image.tmdb.org/t/p/w500${poster}`;
+            setTmdbPoster(posterUrl);
+          }
+
+          if (credits) {
+            setTmdbCredits(credits);
+          }
+        };
+
+        if (needsFallback) {
+          fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&language=en-US`)
+            .then((enRes) => (enRes.ok ? enRes.json() : null))
+            .then((enData) => {
+              if (!isMounted) return;
+              applyData(data, enData);
+            })
+            .catch(() => {
+              if (!isMounted) return;
+              applyData(data);
+            });
+        } else {
+          applyData(data);
         }
       })
       .catch((err) => console.warn("TMDB show details fetch failed:", err));
@@ -224,10 +253,50 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!isMounted || !data || !data.episodes) return;
-          setTmdbSeasonsMap((prev) => ({
-            ...prev,
-            [seasonNum]: data.episodes,
-          }));
+
+          // Check if any episode has empty or generic title/overview
+          const needsEnglishFallback = userLang !== "en-US" && data.episodes.some((ep: any) => {
+            const isGenericName = !ep.name || ep.name.trim() === "" || ep.name.match(/^(episode|episode\s+\d+|حلقة\s+\d+|الحلقة\s+\d+)$/i);
+            return isGenericName || !ep.overview || ep.overview.trim() === "";
+          });
+
+          const applyEpisodes = (mainEpisodes: any[], fallbackEpisodes?: any[]) => {
+            const merged = mainEpisodes.map((ep: any) => {
+              const enEp = fallbackEpisodes?.find((e: any) => e.episode_number === ep.episode_number);
+              
+              const isGenericName = !ep.name || ep.name.trim() === "" || ep.name.match(/^(episode|episode\s+\d+|حلقة\s+\d+|الحلقة\s+\d+)$/i);
+              const name = isGenericName ? (enEp?.name || ep.name) : ep.name;
+              
+              const isGenericPlot = !ep.overview || ep.overview.trim() === "";
+              const overview = isGenericPlot ? (enEp?.overview || ep.overview) : ep.overview;
+
+              return {
+                ...ep,
+                name,
+                overview,
+              };
+            });
+
+            setTmdbSeasonsMap((prev) => ({
+              ...prev,
+              [seasonNum]: merged,
+            }));
+          };
+
+          if (needsEnglishFallback) {
+            fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&season=${seasonNum}&language=en-US`)
+              .then((enRes) => (enRes.ok ? enRes.json() : null))
+              .then((enData) => {
+                if (!isMounted) return;
+                applyEpisodes(data.episodes, enData?.episodes);
+              })
+              .catch(() => {
+                if (!isMounted) return;
+                applyEpisodes(data.episodes);
+              });
+          } else {
+            applyEpisodes(data.episodes);
+          }
         })
         .catch((err) => console.warn(`TMDB Season ${seasonNum} pre-fetch failed:`, err));
     });

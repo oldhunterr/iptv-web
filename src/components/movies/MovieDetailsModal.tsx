@@ -102,29 +102,53 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted || !data) return;
-        
-        if (data.backdrop_path) {
-          const bgUrl = data.backdrop_path.startsWith("http")
-            ? data.backdrop_path
-            : `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
-          setHeroBackdrop(bgUrl);
-        }
-        
-        if (data.poster_path) {
-          const posterUrl = data.poster_path.startsWith("http")
-            ? data.poster_path
-            : `https://image.tmdb.org/t/p/w500${data.poster_path}`;
-          setTmdbPoster(posterUrl);
-        }
-        
-        if (data.overview) {
-          setPlot(data.overview);
-        }
 
-        if (data.credits) {
-          setTmdbCredits(data.credits);
+        const needsFallback = userLang !== "en-US" && (!data.overview || data.overview.trim() === "" || !data.poster_path);
+
+        const applyData = (mainData: any, fallbackData?: any) => {
+          const overview = mainData.overview || fallbackData?.overview;
+          const poster = mainData.poster_path || fallbackData?.poster_path;
+          const backdrop = mainData.backdrop_path || fallbackData?.backdrop_path;
+          const credits = mainData.credits || fallbackData?.credits;
+
+          if (backdrop) {
+            const bgUrl = backdrop.startsWith("http")
+              ? backdrop
+              : `https://image.tmdb.org/t/p/original${backdrop}`;
+            setHeroBackdrop(bgUrl);
+          }
+          
+          if (poster) {
+            const posterUrl = poster.startsWith("http")
+              ? poster
+              : `https://image.tmdb.org/t/p/w500${poster}`;
+            setTmdbPoster(posterUrl);
+          }
+          
+          if (overview) {
+            setPlot(overview);
+          }
+
+          if (credits) {
+            setTmdbCredits(credits);
+          }
+          setLoading(false);
+        };
+
+        if (needsFallback) {
+          fetch(`/api/proxy/tmdb?type=movie&id=${tmdbId}&language=en-US`)
+            .then((enRes) => (enRes.ok ? enRes.json() : null))
+            .then((enData) => {
+              if (!isMounted) return;
+              applyData(data, enData);
+            })
+            .catch(() => {
+              if (!isMounted) return;
+              applyData(data);
+            });
+        } else {
+          applyData(data);
         }
-        setLoading(false);
       })
       .catch((err) => {
         console.warn("TMDB movie details fetch failed:", err);
