@@ -229,13 +229,13 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
             {cover && (
               <img
                 src={cover}
-                alt={title}
+                alt={rawTitle}
                 className="w-32 sm:w-48 rounded-2xl border-2 border-border-subtle/50 shadow-2xl object-cover shrink-0 hidden md:block"
               />
             )}
             <div className="flex-1 min-w-0 pb-4">
               <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight drop-shadow-lg truncate">
-                {title}
+                {rawTitle}
               </h2>
               <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-theme-muted font-medium flex-wrap">
                 {rating && (
