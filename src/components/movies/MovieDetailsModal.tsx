@@ -28,6 +28,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   const [showAllCast, setShowAllCast] = useState(false);
   const [plot, setPlot] = useState<string | undefined>(undefined);
   const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
+  const [imdbId, setImdbId] = useState<string | null>(null);
+  const [tvdbId, setTvdbId] = useState<string | number | null>(null);
 
   // Sync favorite state
   useEffect(() => {
@@ -43,6 +45,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
       setHeroBackdrop(null);
       setTmdbPoster(null);
       setTmdbCredits(null);
+      setImdbId(null);
+      setTvdbId(null);
       setShowAllCast(false);
       setPlot(movie?.plot || movie?.info?.plot);
       return;
@@ -67,7 +71,20 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     const userLang = profile.language || general.language || "en-US";
 
     const { title, year } = cleanTitle(movie.name || movie.title || "");
-    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}&language=${userLang}`;
+
+    // For Arabic-only titles, search in English for better TMDB match accuracy
+    const searchLang = /[a-zA-Z]/.test(title) ? userLang : "en-US";
+
+    let searchQuery = title;
+    if (!/[a-zA-Z]/.test(searchQuery)) {
+      // Arabic-only title: strip common tags and use cleaned raw name
+      searchQuery = (movie.name || movie.title || "")
+        .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
+        .replace(/[\(\[].*?[\)\]]/g, "")
+        .trim();
+    }
+
+    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(searchQuery)}&language=${searchLang}`;
     if (year) searchUrl += `&year=${year}`;
 
     fetch(searchUrl)
@@ -75,6 +92,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
       .then((data) => {
         if (!isMounted || !data) return;
         const results = data.results || [];
+        if (results.length === 0) return;
         // For search/multi, prefer movies
         const match = results.find((r: any) => r.media_type === "movie") || results[0];
         if (match && match.id) {
@@ -110,6 +128,12 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
           const poster = mainData.poster_path || fallbackData?.poster_path;
           const backdrop = mainData.backdrop_path || fallbackData?.backdrop_path;
           const credits = mainData.credits || fallbackData?.credits;
+
+          const imdb = mainData.imdb_id || fallbackData?.imdb_id || mainData.external_ids?.imdb_id || fallbackData?.external_ids?.imdb_id;
+          const tvdb = mainData.external_ids?.tvdb_id || fallbackData?.external_ids?.tvdb_id;
+
+          if (imdb) setImdbId(imdb);
+          if (tvdb) setTvdbId(tvdb);
 
           if (backdrop) {
             const bgUrl = backdrop.startsWith("http")
@@ -250,6 +274,36 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                   </span>
                 )}
                 {releaseDate && <span className="text-theme-muted">{releaseDate}</span>}
+                {tmdbId && (
+                  <a
+                    href={`https://www.themoviedb.org/movie/${tmdbId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20 px-2.5 py-1 rounded-lg border border-yellow-500/20 transition-all font-bold cursor-pointer"
+                  >
+                    TMDB
+                  </a>
+                )}
+                {imdbId && (
+                  <a
+                    href={`https://www.imdb.com/title/${imdbId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-all font-bold cursor-pointer"
+                  >
+                    IMDb
+                  </a>
+                )}
+                {tvdbId && (
+                  <a
+                    href={`https://thetvdb.com/dereferrer/series/${tvdbId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-green-500 bg-green-500/10 hover:bg-green-500/20 px-2.5 py-1 rounded-lg border border-green-500/20 transition-all font-bold cursor-pointer"
+                  >
+                    TVDB
+                  </a>
+                )}
               </div>
               
               {/* Plot Overview in Hero */}

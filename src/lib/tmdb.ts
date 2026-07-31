@@ -4,6 +4,7 @@ import { cleanTitle } from "./formatters";
 export interface TMDBMetadata {
   id?: number | string;
   tmdb_id?: number | string;
+  imdb_id?: string;
   tvdb_id?: number | string;
   title?: string;
   name?: string;
@@ -183,6 +184,7 @@ export async function resolveMetadata(
       const resolved: TMDBMetadata = {
         id: item.stream_id || item.series_id || item.id,
         tmdb_id: apiResult.id || tmdbId,
+        imdb_id: apiResult.imdb_id || apiResult.external_ids?.imdb_id || undefined,
         tvdb_id: apiResult.external_ids?.tvdb_id,
         title: apiResult.title || apiResult.name || rawName,
         name: apiResult.name || apiResult.title || rawName,

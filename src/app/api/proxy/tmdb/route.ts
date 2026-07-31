@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { serverCache } from "@/lib/cache";
 import { fetchTmdbFromApi } from "@/lib/tmdb";
+import { cleanTitle } from "@/lib/formatters";
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const cacheKey = serverCache.formatTmdbKey(type, id || query, season, language);
+    // For search operations, normalize the query with cleanTitle to match
+    // what fetchTmdbFromApi will actually send to TMDB, preventing cache key
+    // mismatches between different raw queries that clean to the same title
+    const cacheQueryOrId = (type === "search" || type === "search_tv") && query
+      ? cleanTitle(query).title
+      : (id || query);
+
+    const cacheKey = serverCache.formatTmdbKey(type, cacheQueryOrId, season, language);
 
     // 1. Check Server Cache
     if (!force) {

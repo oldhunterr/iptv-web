@@ -35,6 +35,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
   const [tmdbCredits, setTmdbCredits] = useState<any>(null);
   const [showAllCast, setShowAllCast] = useState(false);
   const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
+  const [imdbId, setImdbId] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fetchedSeasonsRef = useRef<Set<number>>(new Set());
@@ -58,6 +59,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       setHeroBackdrop(null);
       setTmdbPoster(null);
       setTmdbCredits(null);
+      setImdbId(null);
       setShowAllCast(false);
       fetchedSeasonsRef.current.clear();
       if (audioRef.current) {
@@ -129,7 +131,22 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     const userLang = profile.language || general.language || "en-US";
 
     const { title, year } = cleanTitle(series.name);
-    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(title)}&language=${userLang}`;
+
+    // Always search in English for best match accuracy, especially for Arabic-only titles
+    const searchLang = /[a-zA-Z]/.test(title) ? userLang : "en-US";
+    
+    // If the cleaned title is still Arabic-only, try searching with the raw name in English
+    // TMDB has better matching for Arabic text when querying with language=en-US
+    let searchQuery = title;
+    if (!/[a-zA-Z]/.test(searchQuery)) {
+      // Arabic-only title: use raw name directly (TMDB can handle Arabic queries)
+      searchQuery = series.name
+        .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
+        .replace(/[\(\[].*?[\)\]]/g, "")
+        .trim();
+    }
+
+    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(searchQuery)}&language=${searchLang}`;
     if (year) searchUrl += `&year=${year}`;
 
     fetch(searchUrl)
@@ -137,6 +154,9 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       .then((data) => {
         if (!isMounted || !data) return;
         const results = data.results || [];
+        if (results.length === 0) return;
+        
+        // For Arabic-only queries, try to find a better match by checking original name similarity
         const match = results.find((r: any) => r.media_type === "tv") || results[0];
         if (match && match.id) {
           setTmdbId(match.id);
@@ -171,6 +191,9 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           } else if (fallbackData?.external_ids?.tvdb_id && !tvdbId) {
             setTvdbId(fallbackData.external_ids.tvdb_id);
           }
+
+          const imdb = mainData.imdb_id || fallbackData?.imdb_id || mainData.external_ids?.imdb_id || fallbackData?.external_ids?.imdb_id;
+          if (imdb) setImdbId(imdb);
 
           const backdrop = mainData.backdrop_path || fallbackData?.backdrop_path;
           const poster = mainData.poster_path || fallbackData?.poster_path;
@@ -429,12 +452,17 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           : `https://image.tmdb.org/t/p/w300${tmdbEp.still_path}`
         : undefined;
 
+      // tmdbEp.name and tmdbEp.overview may already be merged with English fallback
+      // from the pre-fetch logic, so use them directly
+      const epName = tmdbEp.name && tmdbEp.name.trim() !== "" ? tmdbEp.name : null;
+      const epOverview = tmdbEp.overview && tmdbEp.overview.trim() !== "" ? tmdbEp.overview : null;
+
       return {
         ...ep,
-        title: tmdbEp.name ? `${ep.episode_num}. ${tmdbEp.name}` : ep.title,
+        title: epName ? `${ep.episode_num}. ${epName}` : ep.title,
         info: {
           ...ep.info,
-          plot: tmdbEp.overview || ep.info?.plot,
+          plot: epOverview || ep.info?.plot || "",
           movie_image: stillUrl || ep.info?.movie_image || ep.cover_big || series.cover,
           cover_big: stillUrl || ep.cover_big || ep.info?.movie_image || series.cover,
           tmdb_id: tmdbId || ep.info?.tmdb_id,
@@ -511,7 +539,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
             )}
             <div className="flex-1 min-w-0 pb-4">
               <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight drop-shadow-lg truncate">
-                {cleanTitle(series.name).title}
+                {series.name}
               </h2>
               <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-theme-muted font-medium flex-wrap">
                 {series.rating && (
@@ -526,6 +554,36 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                   </span>
                 )}
                 {series.releaseDate && <span className="text-theme-muted">{series.releaseDate}</span>}
+                {tmdbId && (
+                  <a
+                    href={`https://www.themoviedb.org/tv/${tmdbId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20 px-2.5 py-1 rounded-lg border border-yellow-500/20 transition-all font-bold cursor-pointer"
+                  >
+                    TMDB
+                  </a>
+                )}
+                {imdbId && (
+                  <a
+                    href={`https://www.imdb.com/title/${imdbId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-amber-500 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-all font-bold cursor-pointer"
+                  >
+                    IMDb
+                  </a>
+                )}
+                {tvdbId && (
+                  <a
+                    href={`https://thetvdb.com/dereferrer/series/${tvdbId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-green-500 bg-green-500/10 hover:bg-green-500/20 px-2.5 py-1 rounded-lg border border-green-500/20 transition-all font-bold cursor-pointer"
+                  >
+                    TVDB
+                  </a>
+                )}
               </div>
               
               {/* Plot Overview in Hero */}
