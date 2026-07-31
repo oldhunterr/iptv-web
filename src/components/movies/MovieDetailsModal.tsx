@@ -101,8 +101,10 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
       .then(async (res) => {
         const durationMs = Math.round(performance.now() - t0);
         const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
-        const upstreamUrl = res.headers.get("X-Upstream-Url") || undefined;
-        const cacheKey = res.headers.get("X-Cache-Key") || undefined;
+        const rawUpstream = res.headers.get("X-Upstream-Url");
+        const upstreamUrl = rawUpstream ? decodeURI(rawUpstream) : undefined;
+        const rawCacheKey = res.headers.get("X-Cache-Key");
+        const cacheKey = rawCacheKey ? decodeURIComponent(rawCacheKey) : undefined;
         const data = res.ok ? await res.json() : null;
 
         traceLogsRef.current.push({
@@ -170,8 +172,10 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
             .then(async (fbRes) => {
               const fbDurationMs = Math.round(performance.now() - fbT0);
               const fbCacheStatus = (fbRes.headers.get("X-Cache") as any) || "N/A";
-              const fbUpstreamUrl = fbRes.headers.get("X-Upstream-Url") || undefined;
-              const fbCacheKey = fbRes.headers.get("X-Cache-Key") || undefined;
+              const rawFbUpstream = fbRes.headers.get("X-Upstream-Url");
+              const fbUpstreamUrl = rawFbUpstream ? decodeURI(rawFbUpstream) : undefined;
+              const rawFbCacheKey = fbRes.headers.get("X-Cache-Key");
+              const fbCacheKey = rawFbCacheKey ? decodeURIComponent(rawFbCacheKey) : undefined;
               const fbData = fbRes.ok ? await fbRes.json() : null;
 
               traceLogsRef.current.push({

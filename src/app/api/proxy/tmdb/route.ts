@@ -61,6 +61,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const safeCacheKey = encodeURIComponent(cacheKey);
+    const safeUpstreamUrl = encodeURI(upstreamUrl);
+
     // 1. Check Server Cache
     if (!force) {
       const cachedData = serverCache.get(cacheKey);
@@ -71,8 +74,8 @@ export async function GET(request: NextRequest) {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Expose-Headers": "X-Cache, X-Cache-Key, X-Upstream-Url",
             "X-Cache": "HIT",
-            "X-Cache-Key": cacheKey,
-            "X-Upstream-Url": upstreamUrl,
+            "X-Cache-Key": safeCacheKey,
+            "X-Upstream-Url": safeUpstreamUrl,
             "Cache-Control": "public, max-age=86400",
           },
         });
@@ -106,8 +109,8 @@ export async function GET(request: NextRequest) {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Expose-Headers": "X-Cache, X-Cache-Key, X-Upstream-Url",
         "X-Cache": "MISS",
-        "X-Cache-Key": cacheKey,
-        "X-Upstream-Url": upstreamUrl,
+        "X-Cache-Key": safeCacheKey,
+        "X-Upstream-Url": safeUpstreamUrl,
         "Cache-Control": "public, max-age=86400",
       },
     });
