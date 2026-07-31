@@ -36,6 +36,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
   const [showAllCast, setShowAllCast] = useState(false);
   const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
   const [imdbId, setImdbId] = useState<string | null>(null);
+  const [tmdbPlot, setTmdbPlot] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fetchedSeasonsRef = useRef<Set<number>>(new Set());
@@ -60,6 +61,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       setTmdbPoster(null);
       setTmdbCredits(null);
       setImdbId(null);
+      setTmdbPlot(null);
       setShowAllCast(false);
       fetchedSeasonsRef.current.clear();
       if (audioRef.current) {
@@ -121,9 +123,15 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     };
   }, [isOpen, series]);
 
-  // Fetch TMDB Show ID and Backdrop if tmdbId is not set
+  // Fetch TMDB Show ID — wait for seriesInfo to load first so we can use
+  // any existing tmdb_id from Xtream data before falling back to search
   useEffect(() => {
     if (!isOpen || !series || tmdbId) return;
+    // Wait for seriesInfo to load before searching — it might have tmdb_id
+    if (!seriesInfo && loading) return;
+
+    // Check if seriesInfo already provided a tmdb_id (set in init effect)
+    // If so, tmdbId is already set and we won't reach here
 
     let isMounted = true;
     const profile = getActiveProfile();
@@ -132,14 +140,12 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
     const { title, year } = cleanTitle(series.name);
 
-    // Always search in English for best match accuracy, especially for Arabic-only titles
+    // For Arabic-only titles, search in English for better match accuracy
     const searchLang = /[a-zA-Z]/.test(title) ? userLang : "en-US";
-    
-    // If the cleaned title is still Arabic-only, try searching with the raw name in English
-    // TMDB has better matching for Arabic text when querying with language=en-US
+
     let searchQuery = title;
     if (!/[a-zA-Z]/.test(searchQuery)) {
-      // Arabic-only title: use raw name directly (TMDB can handle Arabic queries)
+      // Arabic-only title: strip common tags and use cleaned raw name
       searchQuery = series.name
         .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
         .replace(/[\(\[].*?[\)\]]/g, "")
@@ -155,7 +161,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
         if (!isMounted || !data) return;
         const results = data.results || [];
         if (results.length === 0) return;
-        
+
         // For Arabic-only queries, try to find a better match by checking original name similarity
         const match = results.find((r: any) => r.media_type === "tv") || results[0];
         if (match && match.id) {
@@ -167,7 +173,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, series, tmdbId]);
+  }, [isOpen, series, tmdbId, seriesInfo, loading]);
 
   // Fetch TMDB Show Details (external_ids & backdrop) once tmdbId is known
   useEffect(() => {
@@ -198,6 +204,11 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           const backdrop = mainData.backdrop_path || fallbackData?.backdrop_path;
           const poster = mainData.poster_path || fallbackData?.poster_path;
           const credits = mainData.credits || fallbackData?.credits;
+          const overview = (mainData.overview && mainData.overview.trim() !== "") 
+            ? mainData.overview 
+            : (fallbackData?.overview || null);
+
+          if (overview) setTmdbPlot(overview);
 
           if (backdrop) {
             const bgUrl = backdrop.startsWith("http")
@@ -587,9 +598,9 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               </div>
               
               {/* Plot Overview in Hero */}
-              {infoObj.plot && (
+              {(tmdbPlot || infoObj.plot) && (
                 <p className="mt-6 text-base sm:text-lg text-theme-primary leading-relaxed max-w-3xl drop-shadow-md line-clamp-3">
-                  {infoObj.plot}
+                  {tmdbPlot || infoObj.plot}
                 </p>
               )}
             </div>
