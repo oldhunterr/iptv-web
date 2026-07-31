@@ -44,6 +44,23 @@ export async function GET(request: NextRequest) {
 
     const cacheKey = serverCache.formatTmdbKey(type, cacheQueryOrId, season, language, year);
 
+    // Build upstream TMDB API URL string for diagnostics
+    let upstreamUrl = "";
+    if (type === "search" || type === "search_tv") {
+      const { title } = cleanTitle(query || "");
+      const endpoint = type === "search_tv" ? "https://api.themoviedb.org/3/search/tv" : "https://api.themoviedb.org/3/search/movie";
+      upstreamUrl = `${endpoint}?query=${encodeURIComponent(title)}&language=${language}`;
+      if (year) {
+        upstreamUrl += type === "search_tv" ? `&first_air_date_year=${year}` : `&primary_release_year=${year}`;
+      }
+    } else if (type === "tv" || type === "movie") {
+      if (season !== undefined && season !== null && season !== "" && type === "tv") {
+        upstreamUrl = `https://api.themoviedb.org/3/tv/${id}/season/${season}?language=${language}`;
+      } else {
+        upstreamUrl = `https://api.themoviedb.org/3/${type}/${id}?append_to_response=external_ids,credits,images&language=${language}`;
+      }
+    }
+
     // 1. Check Server Cache
     if (!force) {
       const cachedData = serverCache.get(cacheKey);
@@ -52,7 +69,10 @@ export async function GET(request: NextRequest) {
           status: 200,
           headers: {
             "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "X-Cache, X-Cache-Key, X-Upstream-Url",
             "X-Cache": "HIT",
+            "X-Cache-Key": cacheKey,
+            "X-Upstream-Url": upstreamUrl,
             "Cache-Control": "public, max-age=86400",
           },
         });
@@ -84,7 +104,10 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "X-Cache, X-Cache-Key, X-Upstream-Url",
         "X-Cache": "MISS",
+        "X-Cache-Key": cacheKey,
+        "X-Upstream-Url": upstreamUrl,
         "Cache-Control": "public, max-age=86400",
       },
     });

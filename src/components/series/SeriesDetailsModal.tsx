@@ -9,7 +9,9 @@ import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
 import { getUserLanguage } from "@/lib/profile-storage";
 import { findBestMatch } from "@/lib/tmdb";
-import { MetadataAuditModal, MetadataAuditLog } from "@/components/common/MetadataAuditModal";
+import { MetadataAuditModal, MetadataAuditLog, RequestTraceItem } from "@/components/common/MetadataAuditModal";
+
+const sessionOpenCountMap = new Map<string, { count: number; firstOpened: string }>();
 
 interface SeriesDetailsModalProps {
   series: Series | null;
@@ -44,6 +46,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fetchedSeasonsRef = useRef<Set<number>>(new Set());
+  const traceLogsRef = useRef<RequestTraceItem[]>([]);
 
   // Sync favorite state
   useEffect(() => {
@@ -69,6 +72,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     setIsAuditModalOpen(false);
     setShowAllCast(false);
     fetchedSeasonsRef.current.clear();
+    traceLogsRef.current = [];
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -78,12 +82,38 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       return;
     }
 
+    // Track session history for repeat opening detection
+    const sKey = `series_${series.series_id}`;
+    let historyEntry = sessionOpenCountMap.get(sKey);
+    if (historyEntry) {
+      historyEntry.count += 1;
+    } else {
+      historyEntry = { count: 1, firstOpened: new Date().toLocaleTimeString() };
+      sessionOpenCountMap.set(sKey, historyEntry);
+    }
+
     setLoading(true);
     let isMounted = true;
 
+    const t0 = performance.now();
+    const proxyUrl = `/api/proxy/player_api?action=get_series_info&series_id=${series.series_id}`;
     fetchSeriesInfo(series.series_id)
       .then((info) => {
         if (!isMounted) return;
+        const durationMs = Math.round(performance.now() - t0);
+
+        traceLogsRef.current.push({
+          id: Math.random().toString(36).substring(2, 9),
+          type: "xtream_info",
+          label: "XTREAM SERIES INFO",
+          proxyUrl,
+          cacheStatus: "N/A",
+          status: 200,
+          durationMs,
+          timestamp: new Date().toLocaleTimeString(),
+          rawResponse: info,
+        });
+
         setSeriesInfo(info);
         setLoading(false);
 
@@ -141,11 +171,37 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
 
+    const t0 = performance.now();
     fetch(searchUrl)
-      .then((res) => (res.ok ? res.json() : null))
+      .then(async (res) => {
+        const durationMs = Math.round(performance.now() - t0);
+        const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
+        const upstreamUrl = res.headers.get("X-Upstream-Url") || undefined;
+        const cacheKey = res.headers.get("X-Cache-Key") || undefined;
+        const data = res.ok ? await res.json() : null;
+
+        traceLogsRef.current.push({
+          id: Math.random().toString(36).substring(2, 9),
+          type: "tmdb_search",
+          label: "TMDB SEARCH",
+          proxyUrl: searchUrl,
+          upstreamUrl,
+          cacheKey,
+          cacheStatus,
+          status: res.status,
+          durationMs,
+          timestamp: new Date().toLocaleTimeString(),
+          rawResponse: data,
+        });
+
+        return data;
+      })
       .then((data) => {
         if (!isMounted || !data) return;
         const results = data.results || [];
+
+        const sKey = `series_${series.series_id}`;
+        const historyEntry = sessionOpenCountMap.get(sKey) || { count: 1, firstOpened: new Date().toLocaleTimeString() };
 
         if (results.length > 0) {
           const match = findBestMatch(results, title, year, "tv");
@@ -159,15 +215,17 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               source: "tmdb",
               requestedLanguage: userLang,
               tmdbId: match.id,
-              searchUrl,
-              detailsUrl: `/api/proxy/tmdb?type=tv&id=${match.id}&language=${userLang}`,
+              isRepeatShow: historyEntry.count > 1,
+              openCountInSession: historyEntry.count,
+              previousOpenTimestamp: historyEntry.firstOpened,
+              requestTraceLogs: [...traceLogsRef.current],
               matchedCandidate: {
                 id: match.id,
                 name: match.name || match.title,
                 originalName: match.original_name || match.original_title,
                 releaseDate: match.first_air_date,
               },
-              rawPayload: { searchResults: results, selectedSeries: series },
+              rawPayload: { searchResults: results, selectedSeries: series, traceLogs: [...traceLogsRef.current] },
               timestamp: new Date().toLocaleTimeString(),
             });
             return;
@@ -181,8 +239,31 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
         if (fallbackQuery && fallbackQuery !== title) {
           const fallbackUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`;
+          const fbT0 = performance.now();
           fetch(fallbackUrl)
-            .then((res) => (res.ok ? res.json() : null))
+            .then(async (fbRes) => {
+              const fbDurationMs = Math.round(performance.now() - fbT0);
+              const fbCacheStatus = (fbRes.headers.get("X-Cache") as any) || "N/A";
+              const fbUpstreamUrl = fbRes.headers.get("X-Upstream-Url") || undefined;
+              const fbCacheKey = fbRes.headers.get("X-Cache-Key") || undefined;
+              const fbData = fbRes.ok ? await fbRes.json() : null;
+
+              traceLogsRef.current.push({
+                id: Math.random().toString(36).substring(2, 9),
+                type: "tmdb_search",
+                label: "TMDB FALLBACK SEARCH",
+                proxyUrl: fallbackUrl,
+                upstreamUrl: fbUpstreamUrl,
+                cacheKey: fbCacheKey,
+                cacheStatus: fbCacheStatus,
+                status: fbRes.status,
+                durationMs: fbDurationMs,
+                timestamp: new Date().toLocaleTimeString(),
+                rawResponse: fbData,
+              });
+
+              return fbData;
+            })
             .then((fbData) => {
               if (!isMounted || !fbData) return;
               const fbResults = fbData.results || [];
@@ -196,15 +277,17 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                   source: "tmdb",
                   requestedLanguage: userLang,
                   tmdbId: fbMatch.id,
-                  searchUrl: fallbackUrl,
-                  detailsUrl: `/api/proxy/tmdb?type=tv&id=${fbMatch.id}&language=${userLang}`,
+                  isRepeatShow: historyEntry.count > 1,
+                  openCountInSession: historyEntry.count,
+                  previousOpenTimestamp: historyEntry.firstOpened,
+                  requestTraceLogs: [...traceLogsRef.current],
                   matchedCandidate: {
                     id: fbMatch.id,
                     name: fbMatch.name || fbMatch.title,
                     originalName: fbMatch.original_name || fbMatch.original_title,
                     releaseDate: fbMatch.first_air_date,
                   },
-                  rawPayload: { searchResults: fbResults, selectedSeries: series },
+                  rawPayload: { searchResults: fbResults, selectedSeries: series, traceLogs: [...traceLogsRef.current] },
                   timestamp: new Date().toLocaleTimeString(),
                 });
               }
@@ -648,7 +731,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                         tmdbId: tmdbId || undefined,
                         tvdbId: tvdbId || undefined,
                         imdbId: imdbId || undefined,
-                        rawPayload: { series, seriesInfo },
+                        requestTraceLogs: [...traceLogsRef.current],
+                        rawPayload: { series, seriesInfo, traceLogs: [...traceLogsRef.current] },
                         timestamp: new Date().toLocaleTimeString(),
                       });
                     }

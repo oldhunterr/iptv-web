@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { X, Star, Heart, Play, Terminal } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { getUserLanguage } from "@/lib/profile-storage";
 import { findBestMatch } from "@/lib/tmdb";
-import { MetadataAuditModal, MetadataAuditLog } from "@/components/common/MetadataAuditModal";
+import { MetadataAuditModal, MetadataAuditLog, RequestTraceItem } from "@/components/common/MetadataAuditModal";
+
+const sessionOpenCountMap = new Map<string, { count: number; firstOpened: string }>();
 
 interface MovieDetailsModalProps {
   movie: CatalogItem | null;
@@ -35,6 +37,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   const [auditLog, setAuditLog] = useState<MetadataAuditLog | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
+  const traceLogsRef = useRef<RequestTraceItem[]>([]);
+
   // Sync favorite state
   useEffect(() => {
     if (movie) {
@@ -54,9 +58,20 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     setPlot(undefined);
     setAuditLog(null);
     setIsAuditModalOpen(false);
+    traceLogsRef.current = [];
 
     if (!isOpen || !movie) {
       return;
+    }
+
+    // Track session history for repeat opening detection
+    const mKey = `movie_${movie.stream_id || movie.id || movie.name}`;
+    let historyEntry = sessionOpenCountMap.get(mKey);
+    if (historyEntry) {
+      historyEntry.count += 1;
+    } else {
+      historyEntry = { count: 1, firstOpened: new Date().toLocaleTimeString() };
+      sessionOpenCountMap.set(mKey, historyEntry);
     }
 
     setPlot(movie.plot || movie.info?.plot);
@@ -81,11 +96,37 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
 
+    const t0 = performance.now();
     fetch(searchUrl)
-      .then((res) => (res.ok ? res.json() : null))
+      .then(async (res) => {
+        const durationMs = Math.round(performance.now() - t0);
+        const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
+        const upstreamUrl = res.headers.get("X-Upstream-Url") || undefined;
+        const cacheKey = res.headers.get("X-Cache-Key") || undefined;
+        const data = res.ok ? await res.json() : null;
+
+        traceLogsRef.current.push({
+          id: Math.random().toString(36).substring(2, 9),
+          type: "tmdb_search",
+          label: "TMDB MOVIE SEARCH",
+          proxyUrl: searchUrl,
+          upstreamUrl,
+          cacheKey,
+          cacheStatus,
+          status: res.status,
+          durationMs,
+          timestamp: new Date().toLocaleTimeString(),
+          rawResponse: data,
+        });
+
+        return data;
+      })
       .then((data) => {
         if (!isMounted || !data) return;
         const results = data.results || [];
+
+        const mKey = `movie_${movie.stream_id || movie.id || movie.name}`;
+        const historyEntry = sessionOpenCountMap.get(mKey) || { count: 1, firstOpened: new Date().toLocaleTimeString() };
 
         if (results.length > 0) {
           const match = findBestMatch(results, title, year, "movie");
@@ -98,15 +139,17 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
               source: "tmdb",
               requestedLanguage: userLang,
               tmdbId: match.id,
-              searchUrl,
-              detailsUrl: `/api/proxy/tmdb?type=movie&id=${match.id}&language=${userLang}`,
+              isRepeatShow: historyEntry.count > 1,
+              openCountInSession: historyEntry.count,
+              previousOpenTimestamp: historyEntry.firstOpened,
+              requestTraceLogs: [...traceLogsRef.current],
               matchedCandidate: {
                 id: match.id,
                 name: match.name || match.title,
                 originalName: match.original_name || match.original_title,
                 releaseDate: match.release_date,
               },
-              rawPayload: { searchResults: results, selectedMovie: movie },
+              rawPayload: { searchResults: results, selectedMovie: movie, traceLogs: [...traceLogsRef.current] },
               timestamp: new Date().toLocaleTimeString(),
             });
             return;
@@ -121,14 +164,58 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
           .trim();
 
         if (fallbackQuery && fallbackQuery !== title) {
-          fetch(`/api/proxy/tmdb?type=search&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`)
-            .then((res) => (res.ok ? res.json() : null))
+          const fallbackUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`;
+          const fbT0 = performance.now();
+          fetch(fallbackUrl)
+            .then(async (fbRes) => {
+              const fbDurationMs = Math.round(performance.now() - fbT0);
+              const fbCacheStatus = (fbRes.headers.get("X-Cache") as any) || "N/A";
+              const fbUpstreamUrl = fbRes.headers.get("X-Upstream-Url") || undefined;
+              const fbCacheKey = fbRes.headers.get("X-Cache-Key") || undefined;
+              const fbData = fbRes.ok ? await fbRes.json() : null;
+
+              traceLogsRef.current.push({
+                id: Math.random().toString(36).substring(2, 9),
+                type: "tmdb_search",
+                label: "TMDB FALLBACK SEARCH",
+                proxyUrl: fallbackUrl,
+                upstreamUrl: fbUpstreamUrl,
+                cacheKey: fbCacheKey,
+                cacheStatus: fbCacheStatus,
+                status: fbRes.status,
+                durationMs: fbDurationMs,
+                timestamp: new Date().toLocaleTimeString(),
+                rawResponse: fbData,
+              });
+
+              return fbData;
+            })
             .then((fbData) => {
               if (!isMounted || !fbData) return;
               const fbResults = fbData.results || [];
               const fbMatch = findBestMatch(fbResults, fallbackQuery, year, "movie");
               if (fbMatch && fbMatch.id) {
                 setTmdbId(fbMatch.id);
+                setAuditLog({
+                  rawName: rawTitle,
+                  cleanedTitle: fallbackQuery,
+                  extractedYear: year,
+                  source: "tmdb",
+                  requestedLanguage: userLang,
+                  tmdbId: fbMatch.id,
+                  isRepeatShow: historyEntry.count > 1,
+                  openCountInSession: historyEntry.count,
+                  previousOpenTimestamp: historyEntry.firstOpened,
+                  requestTraceLogs: [...traceLogsRef.current],
+                  matchedCandidate: {
+                    id: fbMatch.id,
+                    name: fbMatch.name || fbMatch.title,
+                    originalName: fbMatch.original_name || fbMatch.original_title,
+                    releaseDate: fbMatch.release_date,
+                  },
+                  rawPayload: { searchResults: fbResults, selectedMovie: movie, traceLogs: [...traceLogsRef.current] },
+                  timestamp: new Date().toLocaleTimeString(),
+                });
               }
             })
             .catch(() => {});
@@ -351,7 +438,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                         tmdbId: tmdbId || undefined,
                         tvdbId: tvdbId || undefined,
                         imdbId: imdbId || undefined,
-                        rawPayload: { movie },
+                        requestTraceLogs: [...traceLogsRef.current],
+                        rawPayload: { movie, traceLogs: [...traceLogsRef.current] },
                         timestamp: new Date().toLocaleTimeString(),
                       });
                     }
