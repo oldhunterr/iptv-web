@@ -144,7 +144,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   return (
     <div
       data-testid="movie-details-modal"
-      className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto animate-fade-in"
+      className="fixed inset-0 z-50 bg-app overflow-y-auto animate-fade-in"
     >
       <div className="relative w-full min-h-screen flex flex-col pb-24">
         {/* Hero Backdrop */}
@@ -156,8 +156,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
               className="w-full h-full object-cover opacity-60"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-app via-app/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-app/80 via-transparent to-transparent" />
 
           {/* Close & Header Buttons */}
           <div className="absolute top-6 right-6 flex items-center gap-3 z-20">
@@ -167,7 +167,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
               className={`p-3 rounded-full border backdrop-blur-md transition-all shadow-lg ${
                 isFav
                   ? "bg-rose-600/90 text-white border-rose-400"
-                  : "bg-black/60 text-slate-300 border-slate-700 hover:text-rose-400"
+                  : "bg-black/60 text-theme-primary border-border-subtle hover:text-rose-400"
               }`}
             >
               <Heart className={`w-6 h-6 ${isFav ? "fill-current" : ""}`} />
@@ -176,7 +176,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
             <button
               onClick={onClose}
               data-testid="close-modal-button"
-              className="p-3 bg-black/60 hover:bg-slate-800 rounded-full border border-slate-700 text-slate-300 hover:text-white backdrop-blur-md transition-colors shadow-lg"
+              className="p-3 bg-black/60 hover:bg-surface-hover rounded-full border border-border-subtle text-theme-primary hover:text-white backdrop-blur-md transition-colors shadow-lg"
             >
               <X className="w-6 h-6" />
             </button>
@@ -188,14 +188,14 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
               <img
                 src={cover}
                 alt={title}
-                className="w-32 sm:w-48 rounded-2xl border-2 border-slate-700/50 shadow-2xl object-cover shrink-0 hidden md:block"
+                className="w-32 sm:w-48 rounded-2xl border-2 border-border-subtle/50 shadow-2xl object-cover shrink-0 hidden md:block"
               />
             )}
             <div className="flex-1 min-w-0 pb-4">
               <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight drop-shadow-lg truncate">
                 {title}
               </h2>
-              <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-slate-300 font-medium flex-wrap">
+              <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-theme-muted font-medium flex-wrap">
                 {rating && (
                   <span className="flex items-center gap-1.5 bg-amber-500/20 text-amber-400 px-3 py-1 rounded-lg border border-amber-500/30">
                     <Star className="w-4 h-4 fill-current" />
@@ -207,12 +207,12 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                     {genre}
                   </span>
                 )}
-                {releaseDate && <span className="text-slate-400">{releaseDate}</span>}
+                {releaseDate && <span className="text-theme-muted">{releaseDate}</span>}
               </div>
               
               {/* Plot Overview in Hero */}
               {plot && (
-                <p className="mt-6 text-base sm:text-lg text-slate-300 leading-relaxed max-w-3xl drop-shadow-md line-clamp-3">
+                <p className="mt-6 text-base sm:text-lg text-theme-primary leading-relaxed max-w-3xl drop-shadow-md line-clamp-3">
                   {plot}
                 </p>
               )}
@@ -220,7 +220,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
               <div className="mt-8 flex items-center gap-4">
                 <button
                   onClick={() => onPlay(movie)}
-                  className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-8 py-3.5 rounded-xl font-bold text-lg transition-all shadow-lg shadow-cyan-600/30 hover:shadow-cyan-500/50 hover:scale-105"
+                  className="flex items-center gap-2 bg-accent-primary hover:bg-accent-hover text-white px-8 py-3.5 rounded-xl font-bold text-lg transition-all shadow-lg hover:scale-105"
                 >
                   <Play className="w-6 h-6 fill-current" />
                   Play Movie
@@ -241,7 +241,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                 {tmdbCredits?.cast?.length > 8 && (
                   <button
                     onClick={() => setShowAllCast(!showAllCast)}
-                    className="text-sm text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
+                    className="text-sm text-accent-primary hover:text-accent-hover font-medium transition-colors"
                   >
                     {showAllCast ? "Show Less" : "Show All"}
                   </button>
@@ -257,7 +257,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                 }`}>
                   {tmdbCredits.cast.slice(0, showAllCast ? 50 : 8).map((actor: any) => (
                     <div key={actor.id} className="flex flex-col items-center gap-2 w-28 shrink-0 snap-start group">
-                      <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-800 border-2 border-slate-800 group-hover:border-cyan-500/50 transition-colors">
+                      <div className="w-24 h-24 rounded-full overflow-hidden bg-surface border-2 border-border-subtle group-hover:border-accent-primary/50 transition-colors">
                         {actor.profile_path ? (
                           <img 
                             src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} 
@@ -270,25 +270,25 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                         )}
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-semibold text-slate-200 truncate w-full">{actor.name}</p>
-                        <p className="text-xs text-slate-500 truncate w-full">{actor.character}</p>
+                        <p className="text-sm font-semibold text-theme-primary truncate w-full">{actor.name}</p>
+                        <p className="text-xs text-theme-muted truncate w-full">{actor.character}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                (movie.cast || infoObj.cast) && <p className="text-slate-400 text-sm">Cast: {movie.cast || infoObj.cast}</p>
+                (movie.cast || infoObj.cast) && <p className="text-theme-muted text-sm">Cast: {movie.cast || infoObj.cast}</p>
               )}
 
               {/* Director / Creator */}
-              <div className="text-sm text-slate-400 mt-4">
+              <div className="text-sm text-theme-muted mt-4">
                 {tmdbCredits?.crew?.filter((c:any) => c.job === "Director").length > 0 ? (
                   <p>
-                    <span className="font-semibold text-slate-300">Director: </span>
+                    <span className="font-semibold text-theme-primary">Director: </span>
                     {Array.from(new Set(tmdbCredits.crew.filter((c:any) => c.job === "Director").map((c:any) => c.name))).join(", ")}
                   </p>
                 ) : (movie.director || infoObj.director) ? (
-                  <p><span className="font-semibold text-slate-300">Director: </span>{movie.director || infoObj.director}</p>
+                  <p><span className="font-semibold text-theme-primary">Director: </span>{movie.director || infoObj.director}</p>
                 ) : null}
               </div>
             </div>

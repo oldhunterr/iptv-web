@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Search, RefreshCw, Layers } from "lucide-react";
+import { Search, RefreshCw, Layers, SlidersHorizontal, Settings } from "lucide-react";
+import { UserProfile } from "@/types/settings";
 
 interface SearchFilterHeaderProps {
   searchQuery: string;
@@ -10,6 +11,11 @@ interface SearchFilterHeaderProps {
   itemCount: number;
   onSyncData: () => void;
   isLoading?: boolean;
+  onToggleFilterBar?: () => void;
+  isFilterOpen?: boolean;
+  activeFilterCount?: number;
+  onOpenSettings?: () => void;
+  activeProfile?: UserProfile;
 }
 
 export const SearchFilterHeader: React.FC<SearchFilterHeaderProps> = ({
@@ -19,15 +25,19 @@ export const SearchFilterHeader: React.FC<SearchFilterHeaderProps> = ({
   itemCount,
   onSyncData,
   isLoading = false,
+  onToggleFilterBar,
+  isFilterOpen = false,
+  activeFilterCount = 0,
+  onOpenSettings,
 }) => {
   return (
     <header
       data-testid="search-filter-header"
-      className="bg-slate-900/90 border-b border-slate-800 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-md sticky top-0 z-20"
+      className="bg-glass border-b border-border-subtle p-4 flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-[var(--glass-blur)] sticky top-0 z-20"
     >
       {/* Category Info & Count Badge */}
       <div className="flex items-center gap-3 w-full sm:w-auto">
-        <div className="p-2 bg-slate-800 rounded-xl text-cyan-400">
+        <div className="p-2 bg-surface-hover rounded-xl text-accent-primary">
           <Layers className="w-5 h-5" />
         </div>
         <div>
@@ -43,9 +53,9 @@ export const SearchFilterHeader: React.FC<SearchFilterHeaderProps> = ({
         </div>
       </div>
 
-      {/* Search Input & Sync Controls */}
-      <div className="flex items-center gap-3 w-full sm:w-auto">
-        <div className="relative flex-1 sm:w-72">
+      {/* Search Input, Advanced Filter Toggle & Action Buttons */}
+      <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="relative flex-1 sm:w-64">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
@@ -53,18 +63,52 @@ export const SearchFilterHeader: React.FC<SearchFilterHeaderProps> = ({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             data-testid="catalog-search-input"
-            className="w-full bg-slate-950 text-sm text-slate-200 placeholder-slate-500 pl-9 pr-4 py-2 rounded-xl border border-slate-800 focus:outline-none focus:border-cyan-500 transition-colors shadow-inner"
+            className="w-full bg-app text-sm text-theme-primary placeholder-theme-muted pl-9 pr-4 py-2 rounded-xl border border-border-subtle focus:outline-none focus:border-accent-primary transition-colors shadow-inner"
           />
         </div>
 
+        {/* Filter Drawer Toggle Button */}
+        {onToggleFilterBar && (
+          <button
+            onClick={onToggleFilterBar}
+            data-testid="toggle-filter-drawer-button"
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-all shrink-0 ${
+              isFilterOpen || activeFilterCount > 0
+                ? "bg-accent-primary/20 border-accent-primary text-accent-light shadow-md"
+                : "bg-surface hover:bg-surface-hover text-theme-muted border-border-subtle"
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span className="hidden md:inline">Filter</span>
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-accent-primary text-app font-bold text-[10px] flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Settings Shortcut Button */}
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            data-testid="header-settings-button"
+            className="p-2 bg-surface hover:bg-surface-hover text-theme-muted hover:text-theme-primary rounded-xl border border-border-subtle transition-all shrink-0"
+            title="Open Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Sync Data Button */}
         <button
           onClick={onSyncData}
           disabled={isLoading}
           data-testid="sync-data-button"
-          className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-all shadow-sm shrink-0"
+          className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover disabled:opacity-50 text-theme-muted hover:text-theme-primary text-xs font-semibold rounded-xl border border-border-subtle transition-all shadow-sm shrink-0"
           title="Force Sync / Refresh Data from Server"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-cyan-400" : ""}`} />
+          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-accent-primary" : ""}`} />
           <span className="hidden md:inline">Sync Data</span>
         </button>
       </div>

@@ -74,10 +74,10 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
     <div
       onClick={() => onSelect(item)}
       data-testid={`item-card-${itemId}`}
-      className="group relative flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800 hover:border-cyan-500/50 overflow-hidden shadow-md hover:shadow-cyan-500/10 cursor-pointer transition-all duration-300 hover:-translate-y-1"
+      className="group relative flex flex-col bg-surface/90 rounded-2xl border border-border-subtle hover:border-accent-primary/50 overflow-hidden shadow-md hover:shadow-accent-primary/10 cursor-pointer transition-all duration-305 hover:-translate-y-1"
     >
       {/* Media Poster Wrapper */}
-      <div className="relative aspect-[2/3] w-full bg-slate-950 flex items-center justify-center overflow-hidden">
+      <div className="relative aspect-[2/3] w-full bg-app flex items-center justify-center overflow-hidden">
         {posterUrl && !imgError ? (
           <img
             src={posterUrl}
@@ -91,20 +91,20 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center gap-2 p-4 text-center text-slate-500 w-full h-full bg-slate-950">
+          <div className="flex flex-col items-center justify-center gap-2 p-4 text-center text-theme-muted w-full h-full bg-app">
             {isLive ? (
-              <Tv className="w-10 h-10 stroke-[1.5] text-slate-500" />
+              <Tv className="w-10 h-10 stroke-[1.5] text-theme-muted" />
             ) : (
-              <Film className="w-10 h-10 stroke-[1.5] text-slate-500" />
+              <Film className="w-10 h-10 stroke-[1.5] text-theme-muted" />
             )}
-            <span className="text-xs font-semibold text-slate-400 line-clamp-2 px-1">
+            <span className="text-xs font-semibold text-theme-muted line-clamp-2 px-1">
               {title}
             </span>
           </div>
         )}
 
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-black/40 opacity-80 group-hover:opacity-60 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-t from-app via-transparent to-black/40 opacity-80 group-hover:opacity-60 transition-opacity" />
 
         {/* Badges Container (Top Right) */}
         <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
@@ -145,16 +145,16 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
           data-testid="play-card-button"
           className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
         >
-          <div className="p-3.5 bg-cyan-600/90 hover:bg-cyan-500 text-white rounded-full shadow-xl backdrop-blur-sm transform transition-transform group-hover:scale-110">
+          <div className="p-3.5 bg-accent-primary/95 hover:bg-accent-primary text-white rounded-full shadow-xl backdrop-blur-sm transform transition-transform group-hover:scale-110">
             <Play className="w-6 h-6 fill-current translate-x-0.5" />
           </div>
         </div>
 
         {/* Watch Progress Bar (M9) */}
         {percent > 0 && !isWatched && (
-          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-950/80 z-10">
+          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-app/80 z-10">
             <div
-              className="h-full bg-cyan-400 transition-all duration-300"
+              className="h-full bg-accent-primary transition-all duration-300"
               style={{ width: `${percent}%` }}
             />
           </div>
@@ -163,10 +163,10 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
 
       {/* Card Metadata Title Footer */}
       <div className="p-3">
-        <h3 className="text-xs font-semibold text-slate-100 truncate group-hover:text-cyan-400 transition-colors">
+        <h3 className="text-xs font-semibold text-theme-primary truncate group-hover:text-accent-primary transition-colors">
           {title}
         </h3>
-        <p className="text-[11px] text-slate-500 capitalize mt-0.5">
+        <p className="text-[11px] text-theme-muted capitalize mt-0.5">
           {item.type} {isWatched ? "· Watched" : percent > 0 ? `· ${percent}% watched` : ""}
         </p>
       </div>

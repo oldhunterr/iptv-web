@@ -1,4 +1,4 @@
-export type SectionType = 'live' | 'vod' | 'series' | 'favorites' | 'history' | 'movies';
+export type SectionType = 'live' | 'vod' | 'series' | 'favorites' | 'history' | 'movies' | 'settings';
 export type AppSection = SectionType;
 export type ViewMode = 'grid' | 'list';
 export type SortOption = 'default' | 'name_asc' | 'name_desc' | 'rating_desc' | 'added_desc';
@@ -169,6 +169,10 @@ export interface CatalogItem {
   type: 'live' | 'vod' | 'series' | 'movies';
   poster?: string;
   category_id: string;
+  category_name?: string;
+  group_title?: string;
+  epg_channel_id?: string;
+  tvg_id?: string;
   rating?: string | number;
   rating_5based?: number | string;
   added?: string;

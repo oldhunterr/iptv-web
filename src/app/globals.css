@@ -3,37 +3,100 @@
 @tailwind utilities;
 
 :root {
-  --background: #0f172a;
-  --foreground: #f8fafc;
+  /* Default Surface & Background Variables (dark-glass) */
+  --bg-app: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-surface-hover: #334155;
+  --bg-glass: rgba(15, 23, 42, 0.75);
+
+  /* Border & Glow Variables */
+  --border-subtle: #334155;
+  --border-glow: rgba(6, 182, 212, 0.4);
+
+  /* Typography */
+  --text-primary: #f8fafc;
+  --text-muted: #94a3b8;
+
+  /* Accent Color Palette */
+  --accent-primary: #06b6d4;
+  --accent-hover: #0891b2;
+  --accent-light: #22d3ee;
+  --accent-glow: rgba(6, 182, 212, 0.35);
+
+  /* Glassmorphism Blur */
+  --glass-blur: 16px;
+  --background: var(--bg-app);
+  --foreground: var(--text-primary);
+}
+
+/* Theme Presets Explicit Attribute Rules */
+[data-theme="dark-glass"] {
+  --bg-app: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-surface-hover: #334155;
+  --bg-glass: rgba(15, 23, 42, 0.75);
+  --border-subtle: #334155;
+  --text-primary: #f8fafc;
+  --text-muted: #94a3b8;
+}
+
+[data-theme="oled-black"] {
+  --bg-app: #000000;
+  --bg-surface: #09090b;
+  --bg-surface-hover: #18181b;
+  --bg-glass: rgba(0, 0, 0, 0.85);
+  --border-subtle: #27272a;
+  --text-primary: #fafafa;
+  --text-muted: #a1a1aa;
+}
+
+[data-theme="neon-cyber"] {
+  --bg-app: #0a0a16;
+  --bg-surface: #121124;
+  --bg-surface-hover: #1f1c3a;
+  --bg-glass: rgba(10, 10, 22, 0.8);
+  --border-subtle: #2d285c;
+  --text-primary: #fdf4ff;
+  --text-muted: #a78bfa;
+}
+
+[data-theme="classic-tivimate"] {
+  --bg-app: #0d1b2a;
+  --bg-surface: #1b263b;
+  --bg-surface-hover: #415a77;
+  --bg-glass: rgba(13, 27, 42, 0.8);
+  --border-subtle: #415a77;
+  --text-primary: #e0e1dd;
+  --text-muted: #778da9;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--text-primary);
+  background: var(--bg-app);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbars using variables */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a; /* tailwind slate-950 */
+  background: var(--bg-app);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155; /* tailwind slate-700 */
-  border-radius: 5px;
+  background: var(--border-subtle);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569; /* tailwind slate-600 */
+  background: var(--accent-primary);
 }
 
-/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 #0f172a;
+  scrollbar-color: var(--border-subtle) var(--bg-app);
 }

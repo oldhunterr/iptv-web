@@ -24,7 +24,7 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
 }) => {
   if (!episodes || episodes.length === 0) {
     return (
-      <div className="py-12 text-center text-slate-400">
+      <div className="py-12 text-center text-theme-muted">
         <p>No episodes available for {seasonNum === 0 ? "Specials" : `Season ${seasonNum}`}.</p>
       </div>
     );
@@ -52,10 +52,10 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
           <div
             key={ep.id || ep.episode_num}
             data-testid={`episode-card-${ep.episode_num}`}
-            className="flex flex-col sm:flex-row bg-slate-900/80 hover:bg-slate-800/80 rounded-xl border border-slate-800 hover:border-cyan-500/40 overflow-hidden transition-all duration-200 group"
+            className="flex flex-col sm:flex-row bg-surface/80 hover:bg-surface-hover/80 rounded-xl border border-border-subtle hover:border-accent-primary/45 overflow-hidden transition-all duration-200 group"
           >
             {/* Thumbnail */}
-            <div className="relative sm:w-40 h-28 shrink-0 bg-slate-950 flex items-center justify-center overflow-hidden">
+            <div className="relative sm:w-40 h-28 shrink-0 bg-app flex items-center justify-center overflow-hidden">
               {thumbUrl ? (
                 <img
                   src={thumbUrl}
@@ -72,9 +72,9 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
                 </div>
               )}
               {percent > 0 && !isCompleted && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800">
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-border-subtle">
                   <div
-                    className="h-full bg-cyan-400"
+                    className="h-full bg-accent-primary"
                     style={{ width: `${percent}%` }}
                   />
                 </div>
@@ -85,28 +85,28 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
             <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
               <div>
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-slate-100 truncate group-hover:text-cyan-400 transition-colors">
+                  <h4 className="text-sm font-semibold text-theme-primary truncate group-hover:text-accent-primary transition-colors">
                     {displayTitle}
                   </h4>
                   {ep.info?.duration && (
-                    <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                    <span className="text-[11px] font-mono text-theme-muted shrink-0">
                       {ep.info.duration}
                     </span>
                   )}
                 </div>
                 {ep.info?.plot && (
-                  <p className="text-xs text-slate-400 line-clamp-2 mt-1">
+                  <p className="text-xs text-theme-muted line-clamp-2 mt-1">
                     {ep.info.plot}
                   </p>
                 )}
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-800/80">
+              <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-border-subtle/80">
                 <button
                   onClick={() => onPlayEpisode(ep)}
                   data-testid={`play-episode-${ep.episode_num}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-primary hover:bg-accent-hover text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                   {percent > 0 ? `Resume (${percent}%)` : "Play Episode"}
@@ -117,7 +117,7 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
                     onClick={() => removeFromHistory(itemKey)}
                     title="Remove from Watch History"
                     data-testid={`remove-history-${ep.episode_num}`}
-                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                    className="p-1.5 text-theme-muted hover:text-red-400 hover:bg-surface-hover rounded-lg transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

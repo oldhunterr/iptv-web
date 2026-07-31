@@ -330,7 +330,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
   return (
     <div
       data-testid="series-details-modal"
-      className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto animate-fade-in"
+      className="fixed inset-0 z-50 bg-app overflow-y-auto animate-fade-in"
     >
       <div className="relative w-full min-h-screen flex flex-col pb-24">
         {/* Hero Backdrop */}
@@ -342,8 +342,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               className="w-full h-full object-cover opacity-60"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-app via-app/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-app/80 via-transparent to-transparent" />
 
           {/* Close & Header Buttons */}
           <div className="absolute top-6 right-6 flex items-center gap-3 z-20">
@@ -352,10 +352,10 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               data-testid="theme-audio-button"
               className={`p-3 rounded-full border backdrop-blur-md transition-all shadow-lg ${
                 isPlayingTheme
-                  ? "bg-cyan-600/90 text-white border-cyan-400 animate-pulse"
+                  ? "bg-accent-primary/90 text-white border-accent-light animate-pulse"
                   : themeBlocked
                   ? "bg-amber-600/90 text-white border-amber-400 animate-bounce"
-                  : "bg-black/60 text-slate-300 border-slate-700 hover:text-white"
+                  : "bg-black/60 text-theme-primary border-border-subtle hover:text-white"
               }`}
               title={isPlayingTheme ? "Mute Theme Song" : themeBlocked ? "Play Theme (Autoplay Blocked)" : "Play Theme Song"}
             >
@@ -368,7 +368,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               className={`p-3 rounded-full border backdrop-blur-md transition-all shadow-lg ${
                 isFav
                   ? "bg-rose-600/90 text-white border-rose-400"
-                  : "bg-black/60 text-slate-300 border-slate-700 hover:text-rose-400"
+                  : "bg-black/60 text-theme-primary border-border-subtle hover:text-rose-400"
               }`}
             >
               <Heart className={`w-6 h-6 ${isFav ? "fill-current" : ""}`} />
@@ -377,7 +377,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
             <button
               onClick={onClose}
               data-testid="close-modal-button"
-              className="p-3 bg-black/60 hover:bg-slate-800 rounded-full border border-slate-700 text-slate-300 hover:text-white backdrop-blur-md transition-colors shadow-lg"
+              className="p-3 bg-black/60 hover:bg-surface-hover rounded-full border border-border-subtle text-theme-primary hover:text-white backdrop-blur-md transition-colors shadow-lg"
             >
               <X className="w-6 h-6" />
             </button>
@@ -389,14 +389,14 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               <img
                 src={series.cover}
                 alt={series.name}
-                className="w-32 sm:w-48 rounded-2xl border-2 border-slate-700/50 shadow-2xl object-cover shrink-0 hidden md:block"
+                className="w-32 sm:w-48 rounded-2xl border-2 border-border-subtle/50 shadow-2xl object-cover shrink-0 hidden md:block"
               />
             )}
             <div className="flex-1 min-w-0 pb-4">
               <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight drop-shadow-lg truncate">
                 {cleanTitle(series.name).title}
               </h2>
-              <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-slate-300 font-medium flex-wrap">
+              <div className="flex items-center gap-4 mt-4 text-sm sm:text-base text-theme-muted font-medium flex-wrap">
                 {series.rating && (
                   <span className="flex items-center gap-1.5 bg-amber-500/20 text-amber-400 px-3 py-1 rounded-lg border border-amber-500/30">
                     <Star className="w-4 h-4 fill-current" />
@@ -408,12 +408,12 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                     {series.genre}
                   </span>
                 )}
-                {series.releaseDate && <span className="text-slate-400">{series.releaseDate}</span>}
+                {series.releaseDate && <span className="text-theme-muted">{series.releaseDate}</span>}
               </div>
               
               {/* Plot Overview in Hero */}
               {infoObj.plot && (
-                <p className="mt-6 text-base sm:text-lg text-slate-300 leading-relaxed max-w-3xl drop-shadow-md line-clamp-3">
+                <p className="mt-6 text-base sm:text-lg text-theme-primary leading-relaxed max-w-3xl drop-shadow-md line-clamp-3">
                   {infoObj.plot}
                 </p>
               )}
@@ -432,7 +432,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                 {tmdbCredits?.cast?.length > 8 && (
                   <button
                     onClick={() => setShowAllCast(!showAllCast)}
-                    className="text-sm text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
+                    className="text-sm text-accent-primary hover:text-accent-hover font-medium transition-colors"
                   >
                     {showAllCast ? "Show Less" : "Show All"}
                   </button>
@@ -448,7 +448,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                 }`}>
                   {tmdbCredits.cast.slice(0, showAllCast ? 50 : 8).map((actor: any) => (
                     <div key={actor.id} className="flex flex-col items-center gap-2 w-28 shrink-0 snap-start group">
-                      <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-800 border-2 border-slate-800 group-hover:border-cyan-500/50 transition-colors">
+                      <div className="w-24 h-24 rounded-full overflow-hidden bg-surface border-2 border-border-subtle group-hover:border-accent-primary/50 transition-colors">
                         {actor.profile_path ? (
                           <img 
                             src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} 
@@ -461,8 +461,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                         )}
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-semibold text-slate-200 truncate w-full">{actor.name}</p>
-                        <p className="text-xs text-slate-500 truncate w-full">{actor.character}</p>
+                        <p className="text-sm font-semibold text-theme-primary truncate w-full">{actor.name}</p>
+                        <p className="text-xs text-theme-muted truncate w-full">{actor.character}</p>
                       </div>
                     </div>
                   ))}
@@ -472,14 +472,14 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               )}
 
               {/* Director / Creator */}
-              <div className="text-sm text-slate-400">
+              <div className="text-sm text-theme-muted">
                 {tmdbCredits?.crew?.filter((c:any) => c.job === "Director" || c.job === "Executive Producer" || c.job === "Creator").length > 0 ? (
                   <p>
-                    <span className="font-semibold text-slate-300">Creators / Directors: </span>
+                    <span className="font-semibold text-theme-primary">Creators / Directors: </span>
                     {Array.from(new Set(tmdbCredits.crew.filter((c:any) => c.job === "Director" || c.job === "Executive Producer" || c.job === "Creator").map((c:any) => c.name))).slice(0, 5).join(", ")}
                   </p>
                 ) : infoObj.director ? (
-                  <p><span className="font-semibold text-slate-300">Director: </span>{infoObj.director}</p>
+                  <p><span className="font-semibold text-theme-primary">Director: </span>{infoObj.director}</p>
                 ) : null}
               </div>
             </div>
@@ -487,7 +487,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
           {/* Season Selector & Episode List */}
           <div>
-            <div className="flex items-center justify-between gap-4 border-b border-slate-800/60 pb-4 mb-6">
+            <div className="flex items-center justify-between gap-4 border-b border-border-subtle/60 pb-4 mb-6">
               <h3 className="text-2xl font-bold text-white">Episodes</h3>
 
               {seasonsList.length > 1 ? (
@@ -495,7 +495,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                   value={selectedSeason}
                   onChange={(e) => setSelectedSeason(Number(e.target.value))}
                   data-testid="season-select"
-                  className="bg-slate-900 text-base font-medium text-slate-200 border border-slate-700 rounded-xl px-4 py-2 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-lg"
+                  className="bg-surface text-base font-medium text-theme-primary border border-border-subtle rounded-xl px-4 py-2 focus:outline-none focus:border-accent-primary cursor-pointer shadow-lg"
                 >
                   {seasonsList.map((sNum) => (
                     <option key={sNum} value={sNum}>
@@ -504,15 +504,15 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                   ))}
                 </select>
               ) : (
-                <span className="text-sm text-slate-400 font-medium px-4 py-2 bg-slate-900 rounded-xl border border-slate-800">
+                <span className="text-sm text-theme-muted font-medium px-4 py-2 bg-surface rounded-xl border border-border-subtle">
                   {selectedSeason === 0 ? "Specials" : `Season ${selectedSeason}`}
                 </span>
               )}
             </div>
 
             {loading ? (
-              <div className="py-24 flex flex-col items-center justify-center text-slate-500 gap-4">
-                <Loader2 className="w-10 h-10 animate-spin text-cyan-500/50" />
+              <div className="py-24 flex flex-col items-center justify-center text-theme-muted gap-4">
+                <Loader2 className="w-10 h-10 animate-spin text-accent-primary/50" />
                 <p className="text-base font-medium">Loading episodes metadata...</p>
               </div>
             ) : (
