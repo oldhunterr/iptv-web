@@ -34,8 +34,10 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
   const [heroBackdrop, setHeroBackdrop] = useState<string | null>(null);
   const [tmdbCredits, setTmdbCredits] = useState<any>(null);
   const [showAllCast, setShowAllCast] = useState(false);
+  const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fetchedSeasonsRef = useRef<Set<number>>(new Set());
 
   // Sync favorite state
   useEffect(() => {
@@ -54,8 +56,10 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       setTvdbId(null);
       setTmdbSeasonsMap({});
       setHeroBackdrop(null);
+      setTmdbPoster(null);
       setTmdbCredits(null);
       setShowAllCast(false);
+      fetchedSeasonsRef.current.clear();
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
@@ -167,6 +171,12 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
             : `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
           setHeroBackdrop(bgUrl);
         }
+        if (data.poster_path) {
+          const posterUrl = data.poster_path.startsWith("http")
+            ? data.poster_path
+            : `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+          setTmdbPoster(posterUrl);
+        }
         if (data.credits) {
           setTmdbCredits(data.credits);
         }
@@ -178,31 +188,54 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     };
   }, [isOpen, tmdbId, tvdbId]);
 
-  // Fetch TMDB Season Details when selectedSeason or tmdbId changes
+  // Pre-fetch all seasons' episode metadata in parallel once tmdbId and seriesInfo are loaded
   useEffect(() => {
-    if (!isOpen || !tmdbId || selectedSeason === undefined) return;
-    if (tmdbSeasonsMap[selectedSeason]) return; // already fetched
+    if (!isOpen || !tmdbId || !seriesInfo) return;
 
-    let isMounted = true;
+    // Compute seasons list
+    const seasons: number[] = Array.from(
+      new Set<number>([
+        ...(seriesInfo.seasons
+          ? seriesInfo.seasons
+              .map((s) => s.season_number)
+              .filter((n): n is number => typeof n === "number" && !isNaN(n))
+          : []),
+        ...(seriesInfo.episodes
+          ? Object.keys(seriesInfo.episodes)
+              .map(Number)
+              .filter((n) => !isNaN(n))
+          : []),
+      ])
+    ).sort((a, b) => a - b);
+
+    if (seasons.length === 0) return;
+
     const profile = getActiveProfile();
     const general = getGeneralSettings();
     const userLang = profile.language || general.language || "en-US";
 
-    fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&season=${selectedSeason}&language=${userLang}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!isMounted || !data || !data.episodes) return;
-        setTmdbSeasonsMap((prev) => ({
-          ...prev,
-          [selectedSeason]: data.episodes,
-        }));
-      })
-      .catch((err) => console.warn(`TMDB Season ${selectedSeason} fetch failed:`, err));
+    let isMounted = true;
+
+    seasons.forEach((seasonNum) => {
+      if (fetchedSeasonsRef.current.has(seasonNum)) return;
+      fetchedSeasonsRef.current.add(seasonNum);
+
+      fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&season=${seasonNum}&language=${userLang}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!isMounted || !data || !data.episodes) return;
+          setTmdbSeasonsMap((prev) => ({
+            ...prev,
+            [seasonNum]: data.episodes,
+          }));
+        })
+        .catch((err) => console.warn(`TMDB Season ${seasonNum} pre-fetch failed:`, err));
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, tmdbId, selectedSeason, tmdbSeasonsMap]);
+  }, [isOpen, tmdbId, seriesInfo]);
 
   // Plex Theme Music Audio Playback
   useEffect(() => {
@@ -284,6 +317,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     (series as any).backdrop_path?.[0] ||
     (infoObj as any).backdrop_path?.[0] ||
     series.cover;
+
+  const cover = tmdbPoster || series.cover || (infoObj as any).cover_big;
 
   // Compute available seasons list (including Specials season 0 if present)
   const seasonsList: number[] = Array.from(
@@ -398,9 +433,9 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
           {/* Series Hero Information */}
           <div className="absolute bottom-0 left-0 right-0 p-8 sm:p-12 md:p-16 flex items-end gap-8 z-10 max-w-7xl mx-auto w-full">
-            {series.cover && (
+            {cover && (
               <img
-                src={series.cover}
+                src={cover}
                 alt={series.name}
                 className="w-32 sm:w-48 rounded-2xl border-2 border-border-subtle/50 shadow-2xl object-cover shrink-0 hidden md:block"
               />

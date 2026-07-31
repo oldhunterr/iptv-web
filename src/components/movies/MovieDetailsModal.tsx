@@ -27,6 +27,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   const [tmdbCredits, setTmdbCredits] = useState<any>(null);
   const [showAllCast, setShowAllCast] = useState(false);
   const [plot, setPlot] = useState<string | undefined>(undefined);
+  const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
 
   // Sync favorite state
   useEffect(() => {
@@ -40,6 +41,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     if (!isOpen || !movie) {
       setTmdbId(null);
       setHeroBackdrop(null);
+      setTmdbPoster(null);
       setTmdbCredits(null);
       setShowAllCast(false);
       setPlot(movie?.plot || movie?.info?.plot);
@@ -108,6 +110,13 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
           setHeroBackdrop(bgUrl);
         }
         
+        if (data.poster_path) {
+          const posterUrl = data.poster_path.startsWith("http")
+            ? data.poster_path
+            : `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+          setTmdbPoster(posterUrl);
+        }
+        
         if (data.overview) {
           setPlot(data.overview);
         }
@@ -145,7 +154,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     
   const rawTitle = movie.name || movie.title || "Unknown Movie";
   const { title } = cleanTitle(rawTitle);
-  const cover = movie.stream_icon || movie.cover || movie.poster || infoObj.cover_big;
+  const cover = tmdbPoster || movie.stream_icon || movie.cover || movie.poster || infoObj.cover_big;
   const rating = movie.rating || movie.rating_5based || infoObj.rating;
   const genre = movie.genre || infoObj.genre;
   const releaseDate = movie.releaseDate || movie.release_date || infoObj.release_date;
