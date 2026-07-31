@@ -60,9 +60,11 @@ export async function fetchTmdbFromApi(
   type: string,
   query?: string,
   id?: string | number,
-  season?: string | number
+  season?: string | number,
+  language?: string
 ): Promise<any> {
   const apiKey = getTmdbApiKey();
+  const lang = language || "en-US";
   let url = "";
 
   if (type === "search" || type === "search_tv") {
@@ -71,14 +73,15 @@ export async function fetchTmdbFromApi(
     const searchUrl = new URL(type === "search_tv" ? "https://api.themoviedb.org/3/search/tv" : "https://api.themoviedb.org/3/search/multi");
     searchUrl.searchParams.set("api_key", apiKey);
     searchUrl.searchParams.set("query", title);
+    searchUrl.searchParams.set("language", lang);
     if (year) searchUrl.searchParams.set("year", year);
     url = searchUrl.toString();
   } else if (type === "tv" || type === "movie") {
     if (!id) throw new Error(`ID parameter required for ${type}`);
     if (season !== undefined && season !== null && season !== "" && type === "tv") {
-      url = `https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}`;
+      url = `https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${apiKey}&language=${lang}`;
     } else {
-      url = `https://api.themoviedb.org/3/${type}/${id}?api_key=${apiKey}&append_to_response=external_ids,credits,images`;
+      url = `https://api.themoviedb.org/3/${type}/${id}?api_key=${apiKey}&append_to_response=external_ids,credits,images&language=${lang}`;
     }
   } else {
     throw new Error(`Invalid TMDB request type: ${type}`);
@@ -105,7 +108,8 @@ export async function fetchTmdbFromApi(
 export async function resolveMetadata(
   item: any,
   type: "movie" | "tv" = "movie",
-  forceExternal: boolean = false
+  forceExternal: boolean = false,
+  language?: string
 ): Promise<TMDBMetadata> {
   if (!item) {
     return { source: "fallback" };
@@ -136,7 +140,7 @@ export async function resolveMetadata(
 
   const rawName = item.name || item.info?.name || "";
   const tmdbId = item.tmdb_id || item.info?.tmdb_id;
-  const cacheKey = serverCache.formatTmdbKey(type, tmdbId || rawName);
+  const cacheKey = serverCache.formatTmdbKey(type, tmdbId || rawName, undefined, language);
 
   // Step 2: Check Server Cache
   if (!forceExternal) {
@@ -151,14 +155,14 @@ export async function resolveMetadata(
     let apiResult: any = null;
 
     if (tmdbId) {
-      apiResult = await fetchTmdbFromApi(type, undefined, tmdbId);
+      apiResult = await fetchTmdbFromApi(type, undefined, tmdbId, undefined, language);
     } else if (rawName) {
-      const searchRes = await fetchTmdbFromApi("search", rawName);
+      const searchRes = await fetchTmdbFromApi("search", rawName, undefined, undefined, language);
       if (searchRes && searchRes.results && searchRes.results.length > 0) {
         const match = searchRes.results.find((r: any) => r.media_type === type) || searchRes.results[0];
         const matchType = match.media_type || type;
         if (match.id) {
-          apiResult = await fetchTmdbFromApi(matchType, undefined, match.id);
+          apiResult = await fetchTmdbFromApi(matchType, undefined, match.id, undefined, language);
         }
       }
     }

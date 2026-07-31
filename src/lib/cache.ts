@@ -225,7 +225,8 @@ export class CacheEngine {
   public formatTmdbKey(
     type: string,
     queryOrId?: string | number,
-    season?: string | number
+    season?: string | number,
+    language?: string
   ): string {
     const isNumeric =
       typeof queryOrId === "number" ||
@@ -243,6 +244,10 @@ export class CacheEngine {
 
     if (season !== undefined) {
       params.season = season;
+    }
+
+    if (language !== undefined && language !== null && language !== "") {
+      params.language = language;
     }
 
     return this.buildCacheKey("tmdb", params);

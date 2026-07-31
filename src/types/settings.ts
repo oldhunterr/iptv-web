@@ -100,6 +100,7 @@ export interface UserProfile {
   pinHash?: string;
   parentalControls: ParentalControlSettings;
   themeSettings: ThemeSettings;
+  language?: string; // e.g. 'en-US' | 'fr-FR'
   createdAt: number;
   updatedAt: number;
 }
@@ -188,6 +189,7 @@ export interface GeneralSettings {
   hardwareAcceleration: boolean;
   defaultStreamFormat: "hls" | "ts" | "mp4";
   showUnratedBadge: boolean;
+  language?: string; // Default fallback metadata language (e.g. 'en-US')
 }
 
 export function isRatingAllowed(

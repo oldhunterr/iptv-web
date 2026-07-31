@@ -7,6 +7,7 @@ import { fetchSeriesInfo, getThemeAudioUrl } from "@/lib/api-client";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
+import { getActiveProfile, getGeneralSettings } from "@/lib/profile-storage";
 
 interface SeriesDetailsModalProps {
   series: Series | null;
@@ -119,8 +120,12 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     if (!isOpen || !series || tmdbId) return;
 
     let isMounted = true;
+    const profile = getActiveProfile();
+    const general = getGeneralSettings();
+    const userLang = profile.language || general.language || "en-US";
+
     const { title, year } = cleanTitle(series.name);
-    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(title)}`;
+    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
 
     fetch(searchUrl)
@@ -145,7 +150,11 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     if (!isOpen || !tmdbId) return;
 
     let isMounted = true;
-    fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}`)
+    const profile = getActiveProfile();
+    const general = getGeneralSettings();
+    const userLang = profile.language || general.language || "en-US";
+
+    fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&language=${userLang}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted || !data) return;
@@ -175,7 +184,11 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     if (tmdbSeasonsMap[selectedSeason]) return; // already fetched
 
     let isMounted = true;
-    fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&season=${selectedSeason}`)
+    const profile = getActiveProfile();
+    const general = getGeneralSettings();
+    const userLang = profile.language || general.language || "en-US";
+
+    fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&season=${selectedSeason}&language=${userLang}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted || !data || !data.episodes) return;

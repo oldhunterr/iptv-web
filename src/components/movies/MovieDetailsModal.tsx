@@ -5,6 +5,7 @@ import { X, Star, Heart, Play } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
+import { getActiveProfile, getGeneralSettings } from "@/lib/profile-storage";
 
 interface MovieDetailsModalProps {
   movie: CatalogItem | null;
@@ -59,8 +60,12 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     if (!isOpen || !movie || tmdbId) return;
 
     let isMounted = true;
+    const profile = getActiveProfile();
+    const general = getGeneralSettings();
+    const userLang = profile.language || general.language || "en-US";
+
     const { title, year } = cleanTitle(movie.name || movie.title || "");
-    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}`;
+    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
 
     fetch(searchUrl)
@@ -87,7 +92,11 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
 
     let isMounted = true;
     setLoading(true);
-    fetch(`/api/proxy/tmdb?type=movie&id=${tmdbId}`)
+    const profile = getActiveProfile();
+    const general = getGeneralSettings();
+    const userLang = profile.language || general.language || "en-US";
+
+    fetch(`/api/proxy/tmdb?type=movie&id=${tmdbId}&language=${userLang}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted || !data) return;

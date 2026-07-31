@@ -87,6 +87,16 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
     setProfilesList(getProfiles());
   };
 
+  const handleUpdateProfileLanguage = (language: string) => {
+    const nextProfile: UserProfile = {
+      ...activeProfile,
+      language,
+    };
+    setActiveProfile(nextProfile);
+    saveProfile(nextProfile);
+    setProfilesList(getProfiles());
+  };
+
   const handleSaveDownloads = (updated: Partial<DownloadQueueState>) => {
     const next = { ...downloadQueue, ...updated };
     setDownloadQueue(next);
@@ -222,6 +232,27 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
                   onChange={(e) => handleSaveGeneral({ hardwareAcceleration: e.target.checked })}
                   className="w-5 h-5 accent-accent-primary rounded cursor-pointer"
                 />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-surface rounded-2xl border border-border-subtle">
+                <div>
+                  <h4 className="text-sm font-semibold text-white">Default Metadata Language</h4>
+                  <p className="text-xs text-theme-muted">App-wide fallback metadata language for TMDB fetches</p>
+                </div>
+                <select
+                  value={general.language || "en-US"}
+                  onChange={(e) => handleSaveGeneral({ language: e.target.value })}
+                  data-testid="general-language-select"
+                  className="bg-app border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-theme-primary focus:outline-none focus:border-accent-primary cursor-pointer"
+                >
+                  <option value="en-US">English (US)</option>
+                  <option value="es-ES">Español (ES)</option>
+                  <option value="fr-FR">Français (FR)</option>
+                  <option value="de-DE">Deutsch (DE)</option>
+                  <option value="it-IT">Italiano (IT)</option>
+                  <option value="pt-BR">Português (BR)</option>
+                  <option value="ar-SA">العربية (SA)</option>
+                </select>
               </div>
             </div>
           </div>
@@ -372,9 +403,9 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
             </div>
 
             {/* Active Profile Info */}
-            <div className="p-5 bg-slate-900 rounded-2xl border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-cyan-600/20 border border-cyan-500/30 rounded-xl text-cyan-400">
+            <div className="p-5 bg-surface rounded-2xl border border-border-subtle flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-cyan-600/20 text-cyan-400 rounded-2xl">
                   <Users className="w-6 h-6" />
                 </div>
                 <div>
@@ -387,6 +418,28 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
               <span className="text-xs px-3 py-1 bg-cyan-950 border border-cyan-800 text-cyan-400 font-bold rounded-full">
                 Active Profile
               </span>
+            </div>
+
+            {/* Profile Language */}
+            <div className="p-5 bg-surface rounded-2xl border border-border-subtle flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-white">Profile Language</h4>
+                <p className="text-xs text-theme-muted">Preferred language for movie and series metadata (posters, plots, episode titles)</p>
+              </div>
+              <select
+                value={activeProfile.language || "en-US"}
+                onChange={(e) => handleUpdateProfileLanguage(e.target.value)}
+                data-testid="profile-language-select"
+                className="bg-app border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-theme-primary focus:outline-none focus:border-accent-primary cursor-pointer"
+              >
+                <option value="en-US">English (US)</option>
+                <option value="es-ES">Español (ES)</option>
+                <option value="fr-FR">Français (FR)</option>
+                <option value="de-DE">Deutsch (DE)</option>
+                <option value="it-IT">Italiano (IT)</option>
+                <option value="pt-BR">Português (BR)</option>
+                <option value="ar-SA">العربية (SA)</option>
+              </select>
             </div>
 
             {/* Parental Restriction Controls */}

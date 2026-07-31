@@ -36,6 +36,7 @@ export const DEFAULT_MASTER_PROFILE: UserProfile = {
     glassmorphismEnabled: true,
     glassBlurIntensity: "md",
   },
+  language: "en-US",
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
@@ -58,6 +59,7 @@ export const DEFAULT_KIDS_PROFILE: UserProfile = {
     glassmorphismEnabled: true,
     glassBlurIntensity: "md",
   },
+  language: "en-US",
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
@@ -68,6 +70,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   hardwareAcceleration: true,
   defaultStreamFormat: "hls",
   showUnratedBadge: true,
+  language: "en-US",
 };
 
 export const DEFAULT_FILTER_OPTIONS: ContentFilterOptions = {

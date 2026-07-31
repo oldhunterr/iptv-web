@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get("id") || searchParams.get("tmdb_id") || undefined;
     const season = searchParams.get("season") || undefined;
     const force = searchParams.get("force") === "true";
+    const language = searchParams.get("language") || "en-US";
 
     if (!type || !["search", "search_tv", "tv", "movie"].includes(type)) {
       return NextResponse.json(
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const cacheKey = serverCache.formatTmdbKey(type, id || query, season);
+    const cacheKey = serverCache.formatTmdbKey(type, id || query, season, language);
 
     // 1. Check Server Cache
     if (!force) {
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
     // 2. Fetch fresh data from TMDB API
     let freshData: any;
     try {
-      freshData = await fetchTmdbFromApi(type, query, id, season);
+      freshData = await fetchTmdbFromApi(type, query, id, season, language);
     } catch (err: any) {
       return NextResponse.json(
         { error: err.message || "Failed to fetch data from TMDB API" },
