@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { X, Star, Heart, Play } from "lucide-react";
+import { X, Star, Heart, Play, Terminal } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { getUserLanguage } from "@/lib/profile-storage";
 import { findBestMatch } from "@/lib/tmdb";
+import { MetadataAuditModal, MetadataAuditLog } from "@/components/common/MetadataAuditModal";
 
 interface MovieDetailsModalProps {
   movie: CatalogItem | null;
@@ -31,6 +32,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [tvdbId, setTvdbId] = useState<string | number | null>(null);
+  const [auditLog, setAuditLog] = useState<MetadataAuditLog | null>(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
   // Sync favorite state
   useEffect(() => {
@@ -49,6 +52,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     setTvdbId(null);
     setShowAllCast(false);
     setPlot(undefined);
+    setAuditLog(null);
+    setIsAuditModalOpen(false);
 
     if (!isOpen || !movie) {
       return;
@@ -70,7 +75,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     let isMounted = true;
     const userLang = getUserLanguage();
 
-    const { title, year } = cleanTitle(movie.name || movie.title || "");
+    const rawTitle = movie.name || movie.title || "";
+    const { title, year } = cleanTitle(rawTitle);
 
     let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
@@ -85,6 +91,24 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
           const match = findBestMatch(results, title, year, "movie");
           if (match && match.id) {
             setTmdbId(match.id);
+            setAuditLog({
+              rawName: rawTitle,
+              cleanedTitle: title,
+              extractedYear: year,
+              source: "tmdb",
+              requestedLanguage: userLang,
+              tmdbId: match.id,
+              searchUrl,
+              detailsUrl: `/api/proxy/tmdb?type=movie&id=${match.id}&language=${userLang}`,
+              matchedCandidate: {
+                id: match.id,
+                name: match.name || match.title,
+                originalName: match.original_name || match.original_title,
+                releaseDate: match.release_date,
+              },
+              rawPayload: { searchResults: results, selectedMovie: movie },
+              timestamp: new Date().toLocaleTimeString(),
+            });
             return;
           }
         }
@@ -313,6 +337,32 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                     TVDB
                   </a>
                 )}
+                <button
+                  onClick={() => {
+                    if (!auditLog) {
+                      const rawName = movie.name || movie.title || "";
+                      const { title, year } = cleanTitle(rawName);
+                      setAuditLog({
+                        rawName,
+                        cleanedTitle: title,
+                        extractedYear: year,
+                        source: tmdbId ? "tmdb" : "xtream",
+                        requestedLanguage: getUserLanguage(),
+                        tmdbId: tmdbId || undefined,
+                        tvdbId: tvdbId || undefined,
+                        imdbId: imdbId || undefined,
+                        rawPayload: { movie },
+                        timestamp: new Date().toLocaleTimeString(),
+                      });
+                    }
+                    setIsAuditModalOpen(true);
+                  }}
+                  data-testid="audit-log-badge"
+                  className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 rounded-lg border border-cyan-500/30 transition-all font-bold cursor-pointer"
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Data Source Log</span>
+                </button>
               </div>
               
               {/* Plot Overview in Hero */}
@@ -400,6 +450,13 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Metadata Resolution Debug Log Modal */}
+      <MetadataAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        auditLog={auditLog}
+      />
     </div>
   );
 };

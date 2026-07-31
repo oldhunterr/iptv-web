@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { X, Star, Volume2, VolumeX, Heart, Loader2 } from "lucide-react";
+import { X, Star, Volume2, VolumeX, Heart, Loader2, Terminal } from "lucide-react";
 import { Series, SeriesInfo, Episode, normalizeCatalogItem } from "@/types/iptv";
 import { fetchSeriesInfo, getThemeAudioUrl } from "@/lib/api-client";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
@@ -9,6 +9,7 @@ import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
 import { getUserLanguage } from "@/lib/profile-storage";
 import { findBestMatch } from "@/lib/tmdb";
+import { MetadataAuditModal, MetadataAuditLog } from "@/components/common/MetadataAuditModal";
 
 interface SeriesDetailsModalProps {
   series: Series | null;
@@ -38,6 +39,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
   const [tmdbPoster, setTmdbPoster] = useState<string | null>(null);
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [tmdbPlot, setTmdbPlot] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<MetadataAuditLog | null>(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fetchedSeasonsRef = useRef<Set<number>>(new Set());
@@ -62,6 +65,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     setTmdbCredits(null);
     setImdbId(null);
     setTmdbPlot(null);
+    setAuditLog(null);
+    setIsAuditModalOpen(false);
     setShowAllCast(false);
     fetchedSeasonsRef.current.clear();
     if (audioRef.current) {
@@ -146,6 +151,25 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           const match = findBestMatch(results, title, year, "tv");
           if (match && match.id) {
             setTmdbId(match.id);
+
+            setAuditLog({
+              rawName: series.name,
+              cleanedTitle: title,
+              extractedYear: year,
+              source: "tmdb",
+              requestedLanguage: userLang,
+              tmdbId: match.id,
+              searchUrl,
+              detailsUrl: `/api/proxy/tmdb?type=tv&id=${match.id}&language=${userLang}`,
+              matchedCandidate: {
+                id: match.id,
+                name: match.name || match.title,
+                originalName: match.original_name || match.original_title,
+                releaseDate: match.first_air_date,
+              },
+              rawPayload: { searchResults: results, selectedSeries: series },
+              timestamp: new Date().toLocaleTimeString(),
+            });
             return;
           }
         }
@@ -156,7 +180,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           .trim();
 
         if (fallbackQuery && fallbackQuery !== title) {
-          fetch(`/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`)
+          const fallbackUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`;
+          fetch(fallbackUrl)
             .then((res) => (res.ok ? res.json() : null))
             .then((fbData) => {
               if (!isMounted || !fbData) return;
@@ -164,6 +189,24 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
               const fbMatch = findBestMatch(fbResults, fallbackQuery, year, "tv");
               if (fbMatch && fbMatch.id) {
                 setTmdbId(fbMatch.id);
+                setAuditLog({
+                  rawName: series.name,
+                  cleanedTitle: fallbackQuery,
+                  extractedYear: year,
+                  source: "tmdb",
+                  requestedLanguage: userLang,
+                  tmdbId: fbMatch.id,
+                  searchUrl: fallbackUrl,
+                  detailsUrl: `/api/proxy/tmdb?type=tv&id=${fbMatch.id}&language=${userLang}`,
+                  matchedCandidate: {
+                    id: fbMatch.id,
+                    name: fbMatch.name || fbMatch.title,
+                    originalName: fbMatch.original_name || fbMatch.original_title,
+                    releaseDate: fbMatch.first_air_date,
+                  },
+                  rawPayload: { searchResults: fbResults, selectedSeries: series },
+                  timestamp: new Date().toLocaleTimeString(),
+                });
               }
             })
             .catch(() => {});
@@ -592,6 +635,31 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                     TVDB
                   </a>
                 )}
+                <button
+                  onClick={() => {
+                    if (!auditLog) {
+                      const { title, year } = cleanTitle(series.name);
+                      setAuditLog({
+                        rawName: series.name,
+                        cleanedTitle: title,
+                        extractedYear: year,
+                        source: tmdbId ? "tmdb" : "xtream",
+                        requestedLanguage: getUserLanguage(),
+                        tmdbId: tmdbId || undefined,
+                        tvdbId: tvdbId || undefined,
+                        imdbId: imdbId || undefined,
+                        rawPayload: { series, seriesInfo },
+                        timestamp: new Date().toLocaleTimeString(),
+                      });
+                    }
+                    setIsAuditModalOpen(true);
+                  }}
+                  data-testid="audit-log-badge"
+                  className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 rounded-lg border border-cyan-500/30 transition-all font-bold cursor-pointer"
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Data Source Log</span>
+                </button>
               </div>
               
               {/* Plot Overview in Hero */}
@@ -711,6 +779,13 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Metadata Resolution Debug Log Modal */}
+      <MetadataAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        auditLog={auditLog}
+      />
     </div>
   );
 };

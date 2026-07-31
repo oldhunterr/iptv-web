@@ -266,7 +266,8 @@ export class CacheEngine {
     type: string,
     queryOrId?: string | number,
     season?: string | number,
-    language?: string
+    language?: string,
+    year?: string | number
   ): string {
     const isNumeric =
       typeof queryOrId === "number" ||
@@ -282,8 +283,12 @@ export class CacheEngine {
       }
     }
 
-    if (season !== undefined) {
+    if (season !== undefined && season !== null && season !== "") {
       params.season = season;
+    }
+
+    if (year !== undefined && year !== null && year !== "") {
+      params.year = year;
     }
 
     if (language !== undefined && language !== null && language !== "") {

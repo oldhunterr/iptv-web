@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get("query") || searchParams.get("q") || undefined;
     const id = searchParams.get("id") || searchParams.get("tmdb_id") || undefined;
     const season = searchParams.get("season") || undefined;
+    const year = searchParams.get("year") || searchParams.get("first_air_date_year") || searchParams.get("primary_release_year") || undefined;
     const force = searchParams.get("force") === "true";
     const language = searchParams.get("language") || "en-US";
 
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
       ? cleanTitle(query).title
       : (id || query);
 
-    const cacheKey = serverCache.formatTmdbKey(type, cacheQueryOrId, season, language);
+    const cacheKey = serverCache.formatTmdbKey(type, cacheQueryOrId, season, language, year);
 
     // 1. Check Server Cache
     if (!force) {
