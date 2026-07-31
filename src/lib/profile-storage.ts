@@ -423,3 +423,13 @@ export function saveDefaultFilterOptions(options: ContentFilterOptions): void {
   setItem(FILTERS_DEFAULT_KEY, JSON.stringify(options));
   notifyProfileListeners();
 }
+
+/**
+ * Resolves active metadata language.
+ * Checks general settings first (global preference), then active profile language, defaulting to "en-US".
+ */
+export function getUserLanguage(): string {
+  const general = getGeneralSettings();
+  const profile = getActiveProfile();
+  return general.language || profile.language || "en-US";
+}

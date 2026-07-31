@@ -5,7 +5,7 @@ import { X, Star, Heart, Play } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
-import { getActiveProfile, getGeneralSettings } from "@/lib/profile-storage";
+import { getUserLanguage } from "@/lib/profile-storage";
 import { findBestMatch } from "@/lib/tmdb";
 
 interface MovieDetailsModalProps {
@@ -68,9 +68,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     if (!isOpen || !movie || tmdbId) return;
 
     let isMounted = true;
-    const profile = getActiveProfile();
-    const general = getGeneralSettings();
-    const userLang = profile.language || general.language || "en-US";
+    const userLang = getUserLanguage();
 
     const { title, year } = cleanTitle(movie.name || movie.title || "");
 
@@ -125,9 +123,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
 
     let isMounted = true;
     setLoading(true);
-    const profile = getActiveProfile();
-    const general = getGeneralSettings();
-    const userLang = profile.language || general.language || "en-US";
+    const userLang = getUserLanguage();
 
     fetch(`/api/proxy/tmdb?type=movie&id=${tmdbId}&language=${userLang}`)
       .then((res) => (res.ok ? res.json() : null))

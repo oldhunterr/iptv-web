@@ -72,6 +72,13 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
     const next = { ...general, ...updated };
     setGeneral(next);
     saveGeneralSettings(next);
+
+    if (updated.language) {
+      const nextProfile = { ...activeProfile, language: updated.language };
+      setActiveProfile(nextProfile);
+      saveProfile(nextProfile);
+      setProfilesList(getProfiles());
+    }
   };
 
   const handleUpdateProfileParental = (updatedParental: Partial<UserProfile["parentalControls"]>) => {
@@ -94,6 +101,11 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
     };
     setActiveProfile(nextProfile);
     saveProfile(nextProfile);
+
+    const nextGeneral = { ...general, language };
+    setGeneral(nextGeneral);
+    saveGeneralSettings(nextGeneral);
+
     setProfilesList(getProfiles());
   };
 

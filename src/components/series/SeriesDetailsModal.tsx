@@ -7,7 +7,7 @@ import { fetchSeriesInfo, getThemeAudioUrl } from "@/lib/api-client";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
-import { getActiveProfile, getGeneralSettings } from "@/lib/profile-storage";
+import { getUserLanguage } from "@/lib/profile-storage";
 import { findBestMatch } from "@/lib/tmdb";
 
 interface SeriesDetailsModalProps {
@@ -129,9 +129,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     if (!seriesInfo && loading) return;
 
     let isMounted = true;
-    const profile = getActiveProfile();
-    const general = getGeneralSettings();
-    const userLang = profile.language || general.language || "en-US";
+    const userLang = getUserLanguage();
 
     const { title, year } = cleanTitle(series.name);
 
@@ -183,9 +181,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     if (!isOpen || !tmdbId) return;
 
     let isMounted = true;
-    const profile = getActiveProfile();
-    const general = getGeneralSettings();
-    const userLang = profile.language || general.language || "en-US";
+    const userLang = getUserLanguage();
 
     fetch(`/api/proxy/tmdb?type=tv&id=${tmdbId}&language=${userLang}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -276,9 +272,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
     if (seasons.length === 0) return;
 
-    const profile = getActiveProfile();
-    const general = getGeneralSettings();
-    const userLang = profile.language || general.language || "en-US";
+    const userLang = getUserLanguage();
 
     let isMounted = true;
 
