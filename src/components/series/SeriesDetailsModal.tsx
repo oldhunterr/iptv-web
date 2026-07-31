@@ -8,6 +8,7 @@ import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
 import { getActiveProfile, getGeneralSettings } from "@/lib/profile-storage";
+import { findBestMatch } from "@/lib/tmdb";
 
 interface SeriesDetailsModalProps {
   series: Series | null;
@@ -50,24 +51,25 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
   // Reset state when modal closes or series changes
   useEffect(() => {
+    setSeriesInfo(null);
+    setIsPlayingTheme(false);
+    setThemeBlocked(false);
+    setTmdbId(null);
+    setTvdbId(null);
+    setTmdbSeasonsMap({});
+    setHeroBackdrop(null);
+    setTmdbPoster(null);
+    setTmdbCredits(null);
+    setImdbId(null);
+    setTmdbPlot(null);
+    setShowAllCast(false);
+    fetchedSeasonsRef.current.clear();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
     if (!isOpen || !series) {
-      setSeriesInfo(null);
-      setIsPlayingTheme(false);
-      setThemeBlocked(false);
-      setTmdbId(null);
-      setTvdbId(null);
-      setTmdbSeasonsMap({});
-      setHeroBackdrop(null);
-      setTmdbPoster(null);
-      setTmdbCredits(null);
-      setImdbId(null);
-      setTmdbPlot(null);
-      setShowAllCast(false);
-      fetchedSeasonsRef.current.clear();
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
       return;
     }
 
@@ -80,7 +82,6 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
         setSeriesInfo(info);
         setLoading(false);
 
-        // Extract available season numbers including 0 (Specials)
         const seasonNums: number[] = [];
         if (info.seasons && info.seasons.length > 0) {
           info.seasons.forEach((s) => {
@@ -102,7 +103,6 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
           setSelectedSeason(1);
         }
 
-        // Check if IDs are directly available on series or info
         const existingTmdb = (series as any).tmdb_id || (info.info as any)?.tmdb_id;
         const existingTvdb = (series as any).tvdb_id || (info.info as any)?.tvdb_id;
 
@@ -123,15 +123,10 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     };
   }, [isOpen, series]);
 
-  // Fetch TMDB Show ID — wait for seriesInfo to load first so we can use
-  // any existing tmdb_id from Xtream data before falling back to search
+  // Fetch TMDB Show ID
   useEffect(() => {
     if (!isOpen || !series || tmdbId) return;
-    // Wait for seriesInfo to load before searching — it might have tmdb_id
     if (!seriesInfo && loading) return;
-
-    // Check if seriesInfo already provided a tmdb_id (set in init effect)
-    // If so, tmdbId is already set and we won't reach here
 
     let isMounted = true;
     const profile = getActiveProfile();
@@ -140,19 +135,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
 
     const { title, year } = cleanTitle(series.name);
 
-    // For Arabic-only titles, search in English for better match accuracy
-    const searchLang = /[a-zA-Z]/.test(title) ? userLang : "en-US";
-
-    let searchQuery = title;
-    if (!/[a-zA-Z]/.test(searchQuery)) {
-      // Arabic-only title: strip common tags and use cleaned raw name
-      searchQuery = series.name
-        .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
-        .replace(/[\(\[].*?[\)\]]/g, "")
-        .trim();
-    }
-
-    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(searchQuery)}&language=${searchLang}`;
+    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
 
     fetch(searchUrl)
@@ -160,12 +143,32 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
       .then((data) => {
         if (!isMounted || !data) return;
         const results = data.results || [];
-        if (results.length === 0) return;
 
-        // For Arabic-only queries, try to find a better match by checking original name similarity
-        const match = results.find((r: any) => r.media_type === "tv") || results[0];
-        if (match && match.id) {
-          setTmdbId(match.id);
+        if (results.length > 0) {
+          const match = findBestMatch(results, title, year, "tv");
+          if (match && match.id) {
+            setTmdbId(match.id);
+            return;
+          }
+        }
+
+        const fallbackQuery = series.name
+          .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
+          .replace(/[\(\[].*?[\)\]]/g, "")
+          .trim();
+
+        if (fallbackQuery && fallbackQuery !== title) {
+          fetch(`/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((fbData) => {
+              if (!isMounted || !fbData) return;
+              const fbResults = fbData.results || [];
+              const fbMatch = findBestMatch(fbResults, fallbackQuery, year, "tv");
+              if (fbMatch && fbMatch.id) {
+                setTmdbId(fbMatch.id);
+              }
+            })
+            .catch(() => {});
         }
       })
       .catch((err) => console.warn("TMDB search failed:", err));

@@ -149,7 +149,7 @@ describe("TMDB & Smart Metadata Resolver Unit Tests", () => {
     });
 
     it("should return cached response on hit with X-Cache: HIT header", async () => {
-      const cacheKey = serverCache.formatTmdbKey("movie", "27205");
+      const cacheKey = serverCache.formatTmdbKey("movie", "27205", undefined, "en-US");
       const mockData = { id: 27205, title: "Inception" };
       serverCache.set(cacheKey, mockData);
 

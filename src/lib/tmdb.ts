@@ -1,6 +1,8 @@
 import { serverCache } from "./cache";
 import { cleanTitle } from "./formatters";
 
+export { cleanTitle };
+
 export interface TMDBMetadata {
   id?: number | string;
   tmdb_id?: number | string;
@@ -55,6 +57,68 @@ export function hasRequiredXtreamMetadata(item: any): boolean {
 }
 
 /**
+ * Smart matching algorithm to pick the best TMDB search result based on title similarity and release year.
+ */
+export function findBestMatch(
+  results: any[],
+  query: string,
+  year?: string,
+  targetType: "tv" | "movie" = "tv"
+): any | null {
+  if (!results || results.length === 0) return null;
+
+  const targetTitle = query.toLowerCase().trim();
+  let bestItem: any = null;
+  let maxScore = -1;
+
+  for (const item of results) {
+    const itemType = item.media_type || targetType;
+    if (itemType !== targetType && results.length > 1) continue;
+
+    let score = 0;
+    const names = [
+      item.name,
+      item.title,
+      item.original_name,
+      item.original_title,
+    ]
+      .filter((n): n is string => Boolean(n) && typeof n === "string")
+      .map((n) => n.toLowerCase().trim());
+
+    if (names.some((n) => n === targetTitle)) {
+      score += 100;
+    } else if (names.some((n) => n.includes(targetTitle) || targetTitle.includes(n))) {
+      score += 50;
+    } else {
+      const targetWords = targetTitle.split(/\s+/).filter((w) => w.length > 1);
+      let wordMatches = 0;
+      names.forEach((n) => {
+        targetWords.forEach((w) => {
+          if (n.includes(w)) wordMatches++;
+        });
+      });
+      score += wordMatches * 10;
+    }
+
+    const dateStr = item.first_air_date || item.release_date || "";
+    if (year && dateStr.startsWith(year)) {
+      score += 40;
+    }
+
+    if (item.popularity && typeof item.popularity === "number") {
+      score += Math.min(10, item.popularity / 10);
+    }
+
+    if (score > maxScore) {
+      maxScore = score;
+      bestItem = item;
+    }
+  }
+
+  return bestItem || results[0];
+}
+
+/**
  * Fetch fresh data directly from TMDB external API using TMDB_API_KEY.
  */
 export async function fetchTmdbFromApi(
@@ -71,11 +135,18 @@ export async function fetchTmdbFromApi(
   if (type === "search" || type === "search_tv") {
     if (!query) throw new Error("Query parameter required for search");
     const { title, year } = cleanTitle(query);
-    const searchUrl = new URL(type === "search_tv" ? "https://api.themoviedb.org/3/search/tv" : "https://api.themoviedb.org/3/search/multi");
+    const searchEndpoint = type === "search_tv" ? "https://api.themoviedb.org/3/search/tv" : "https://api.themoviedb.org/3/search/movie";
+    const searchUrl = new URL(searchEndpoint);
     searchUrl.searchParams.set("api_key", apiKey);
     searchUrl.searchParams.set("query", title);
     searchUrl.searchParams.set("language", lang);
-    if (year) searchUrl.searchParams.set("year", year);
+    if (year) {
+      if (type === "search_tv") {
+        searchUrl.searchParams.set("first_air_date_year", year);
+      } else {
+        searchUrl.searchParams.set("primary_release_year", year);
+      }
+    }
     url = searchUrl.toString();
   } else if (type === "tv" || type === "movie") {
     if (!id) throw new Error(`ID parameter required for ${type}`);
@@ -158,12 +229,13 @@ export async function resolveMetadata(
     if (tmdbId) {
       apiResult = await fetchTmdbFromApi(type, undefined, tmdbId, undefined, language);
     } else if (rawName) {
-      const searchRes = await fetchTmdbFromApi("search", rawName, undefined, undefined, language);
+      const searchType = type === "tv" ? "search_tv" : "search";
+      const { title, year } = cleanTitle(rawName);
+      const searchRes = await fetchTmdbFromApi(searchType, rawName, undefined, undefined, language);
       if (searchRes && searchRes.results && searchRes.results.length > 0) {
-        const match = searchRes.results.find((r: any) => r.media_type === type) || searchRes.results[0];
-        const matchType = match.media_type || type;
-        if (match.id) {
-          apiResult = await fetchTmdbFromApi(matchType, undefined, match.id, undefined, language);
+        const match = findBestMatch(searchRes.results, title, year, type);
+        if (match && match.id) {
+          apiResult = await fetchTmdbFromApi(type, undefined, match.id, undefined, language);
         }
       }
     }

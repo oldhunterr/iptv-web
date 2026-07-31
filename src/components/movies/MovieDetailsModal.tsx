@@ -6,6 +6,7 @@ import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { getActiveProfile, getGeneralSettings } from "@/lib/profile-storage";
+import { findBestMatch } from "@/lib/tmdb";
 
 interface MovieDetailsModalProps {
   movie: CatalogItem | null;
@@ -38,17 +39,18 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     }
   }, [movie]);
 
-  // Reset state when modal closes
+  // Reset state when modal closes or movie changes
   useEffect(() => {
+    setTmdbId(null);
+    setHeroBackdrop(null);
+    setTmdbPoster(null);
+    setTmdbCredits(null);
+    setImdbId(null);
+    setTvdbId(null);
+    setShowAllCast(false);
+    setPlot(undefined);
+
     if (!isOpen || !movie) {
-      setTmdbId(null);
-      setHeroBackdrop(null);
-      setTmdbPoster(null);
-      setTmdbCredits(null);
-      setImdbId(null);
-      setTvdbId(null);
-      setShowAllCast(false);
-      setPlot(movie?.plot || movie?.info?.plot);
       return;
     }
 
@@ -72,19 +74,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
 
     const { title, year } = cleanTitle(movie.name || movie.title || "");
 
-    // For Arabic-only titles, search in English for better TMDB match accuracy
-    const searchLang = /[a-zA-Z]/.test(title) ? userLang : "en-US";
-
-    let searchQuery = title;
-    if (!/[a-zA-Z]/.test(searchQuery)) {
-      // Arabic-only title: strip common tags and use cleaned raw name
-      searchQuery = (movie.name || movie.title || "")
-        .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
-        .replace(/[\(\[].*?[\)\]]/g, "")
-        .trim();
-    }
-
-    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(searchQuery)}&language=${searchLang}`;
+    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}&language=${userLang}`;
     if (year) searchUrl += `&year=${year}`;
 
     fetch(searchUrl)
@@ -92,11 +82,34 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
       .then((data) => {
         if (!isMounted || !data) return;
         const results = data.results || [];
-        if (results.length === 0) return;
-        // For search/multi, prefer movies
-        const match = results.find((r: any) => r.media_type === "movie") || results[0];
-        if (match && match.id) {
-          setTmdbId(match.id);
+
+        if (results.length > 0) {
+          const match = findBestMatch(results, title, year, "movie");
+          if (match && match.id) {
+            setTmdbId(match.id);
+            return;
+          }
+        }
+
+        // Fallback: search raw name stripped of common tags if cleaned title returned 0 results
+        const rawName = movie.name || movie.title || "";
+        const fallbackQuery = rawName
+          .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
+          .replace(/[\(\[].*?[\)\]]/g, "")
+          .trim();
+
+        if (fallbackQuery && fallbackQuery !== title) {
+          fetch(`/api/proxy/tmdb?type=search&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((fbData) => {
+              if (!isMounted || !fbData) return;
+              const fbResults = fbData.results || [];
+              const fbMatch = findBestMatch(fbResults, fallbackQuery, year, "movie");
+              if (fbMatch && fbMatch.id) {
+                setTmdbId(fbMatch.id);
+              }
+            })
+            .catch(() => {});
         }
       })
       .catch((err) => console.warn("TMDB search failed:", err));

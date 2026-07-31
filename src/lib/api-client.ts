@@ -13,12 +13,11 @@ const BASE_PROXY_URL = "/api/proxy";
 export function getStreamUrl(
   type: "live" | "movie" | "series",
   streamId: string | number,
-  containerExt: string = "mp4"
+  containerExt?: string
 ): string {
   let ext = containerExt;
-  // Fall back to ts for live streams if no extension is provided
-  if (type === "live" && !ext) {
-    ext = "ts";
+  if (!ext) {
+    ext = type === "live" ? "m3u8" : "mp4";
   }
   return `${BASE_PROXY_URL}/stream?type=${type}&stream_id=${streamId}&container=${ext}`;
 }

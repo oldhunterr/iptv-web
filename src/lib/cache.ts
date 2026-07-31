@@ -1,5 +1,12 @@
-import fs from 'fs';
-import path from 'path';
+function getServerModule(moduleName: string): any {
+  if (typeof window !== "undefined") return null;
+  try {
+    const req = eval("require");
+    return req(moduleName);
+  } catch {
+    return null;
+  }
+}
 
 export interface CacheEntry<T = any> {
   value: T;
@@ -22,24 +29,35 @@ export class CacheEngine {
   private defaultTtlMs: number;
   private hits = 0;
   private misses = 0;
-  private cacheDir: string;
+  private cacheDir: string | null = null;
 
   constructor(maxSize: number = 5000, defaultTtlMs: number = 300_000) {
     this.maxSize = maxSize;
     this.defaultTtlMs = defaultTtlMs;
-    this.cacheDir = path.join(process.cwd(), '.cache', 'iptv_server');
-    try {
-      if (!fs.existsSync(this.cacheDir)) {
-        fs.mkdirSync(this.cacheDir, { recursive: true });
+    const path = getServerModule("path");
+    const fs = getServerModule("fs");
+    if (path && fs) {
+      try {
+        this.cacheDir = path.join(process.cwd(), ".cache", "iptv_server");
+        if (!fs.existsSync(this.cacheDir)) {
+          fs.mkdirSync(this.cacheDir, { recursive: true });
+        }
+      } catch (e) {
+        console.error("Failed to create cache directory", e);
       }
-    } catch (e) {
-      console.error("Failed to create cache directory", e);
     }
   }
 
-  private getFilePath(key: string): string {
-    const safeKey = key.replace(/[^a-z0-9_-]/gi, '_');
-    return path.join(this.cacheDir, `${safeKey}.json`);
+  private getFilePath(key: string): string | null {
+    if (!this.cacheDir) return null;
+    const path = getServerModule("path");
+    if (!path) return null;
+    try {
+      const safeKey = key.replace(/[^a-z0-9_-]/gi, "_");
+      return path.join(this.cacheDir, `${safeKey}.json`);
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -65,10 +83,14 @@ export class CacheEngine {
     this.store.set(key, entry);
 
     // Persist to disk
-    try {
-      fs.writeFileSync(this.getFilePath(key), JSON.stringify(entry));
-    } catch (e) {
-      console.error("Failed to write cache to disk", e);
+    const filePath = this.getFilePath(key);
+    const fs = getServerModule("fs");
+    if (filePath && fs) {
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(entry));
+      } catch (e) {
+        console.error("Failed to write cache to disk", e);
+      }
     }
   }
 
@@ -80,18 +102,21 @@ export class CacheEngine {
 
     if (!entry) {
       // Try to recover from disk
-      try {
-        const filePath = this.getFilePath(key);
-        if (fs.existsSync(filePath)) {
-          const fileData = fs.readFileSync(filePath, 'utf8');
-          const parsed = JSON.parse(fileData) as CacheEntry;
-          if (parsed && parsed.expiresAt) {
-            entry = parsed;
-            this.store.set(key, entry); // Load back into memory
+      const filePath = this.getFilePath(key);
+      const fs = getServerModule("fs");
+      if (filePath && fs) {
+        try {
+          if (fs.existsSync(filePath)) {
+            const fileData = fs.readFileSync(filePath, "utf8");
+            const parsed = JSON.parse(fileData) as CacheEntry;
+            if (parsed && parsed.expiresAt) {
+              entry = parsed;
+              this.store.set(key, entry); // Load back into memory
+            }
           }
+        } catch (e) {
+          // Disk miss or parse error
         }
-      } catch (e) {
-        // Disk miss or parse error
       }
     }
 
@@ -139,6 +164,21 @@ export class CacheEngine {
     this.store.clear();
     this.hits = 0;
     this.misses = 0;
+
+    if (this.cacheDir) {
+      const fs = getServerModule("fs");
+      const path = getServerModule("path");
+      if (fs && path && fs.existsSync(this.cacheDir)) {
+        try {
+          const files = fs.readdirSync(this.cacheDir);
+          for (const f of files) {
+            if (process.env.NODE_ENV === "test" || f.startsWith("tmdb_") || f.startsWith("player_api_") || f.startsWith("intro_")) {
+              fs.unlinkSync(path.join(this.cacheDir, f));
+            }
+          }
+        } catch {}
+      }
+    }
   }
 
   /**

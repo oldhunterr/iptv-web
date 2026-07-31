@@ -7,8 +7,8 @@ export function cleanTitle(rawName: string): { title: string; year?: string } {
   let title = rawName;
   let year: string | undefined = undefined;
 
-  // Remove common IPTV prefixes
-  title = title.replace(/^(EN\||UK\||US\||FR\||DE\||AR\||ES\||PT\||IT\||RU\||TR\||IN\||PK\|)\s*/i, "");
+  // Remove common IPTV prefixes e.g. EN|, US:, UK -
+  title = title.replace(/^(EN|UK|US|FR|DE|AR|ES|PT|IT|RU|TR|IN|PK)[:| -]\s*/i, "");
 
   // Extract year if present in parentheses or brackets e.g., (2022), (2022-2026), [2022]
   const yearMatch = title.match(/[\(\[](\d{4})(?:-\d{4})?[\)\]]/);
