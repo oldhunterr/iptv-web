@@ -113,6 +113,19 @@ describe("CacheEngine Unit Tests", () => {
     expect(themeKey).toBe("theme:tvdb_id=121361");
   });
 
+  it("should prevent disk cache key collisions for equal-length non-ASCII Arabic titles", () => {
+    const key1 = cache.formatTmdbKey("search_tv", "بيارق العربا", undefined, "ar-SA", "2011");
+    const key2 = cache.formatTmdbKey("search_tv", "مختار الثقفي", undefined, "ar-SA", "2011");
+
+    expect(key1).not.toEqual(key2);
+
+    cache.set(key1, { title: "بيارق العربا" });
+    cache.set(key2, { title: "مختار الثقفي" });
+
+    expect(cache.get(key1)).toEqual({ title: "بيارق العربا" });
+    expect(cache.get(key2)).toEqual({ title: "مختار الثقفي" });
+  });
+
   it("should export global serverCache instance", () => {
     expect(serverCache).toBeInstanceOf(CacheEngine);
   });

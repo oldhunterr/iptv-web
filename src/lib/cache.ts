@@ -51,10 +51,24 @@ export class CacheEngine {
   private getFilePath(key: string): string | null {
     if (!this.cacheDir) return null;
     const path = getServerModule("path");
+    const crypto = getServerModule("crypto");
     if (!path) return null;
     try {
-      const safeKey = key.replace(/[^a-z0-9_-]/gi, "_");
-      return path.join(this.cacheDir, `${safeKey}.json`);
+      const prefix = key.split(":")[0] || "cache";
+      const safePrefix = prefix.replace(/[^a-z0-9_-]/gi, "_");
+      let hash = "";
+
+      if (crypto && typeof crypto.createHash === "function") {
+        hash = crypto.createHash("md5").update(key).digest("hex");
+      } else {
+        let h = 0;
+        for (let i = 0; i < key.length; i++) {
+          h = (Math.imul(31, h) + key.charCodeAt(i)) | 0;
+        }
+        hash = Math.abs(h).toString(16);
+      }
+
+      return path.join(this.cacheDir, `${safePrefix}_${hash}.json`);
     } catch {
       return null;
     }
