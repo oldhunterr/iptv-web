@@ -8,7 +8,7 @@ import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { EpisodeList } from "./EpisodeList";
 import { getUserLanguage } from "@/lib/profile-storage";
-import { findBestMatch } from "@/lib/tmdb";
+import { findBestMatch, generateArabicSearchVariants } from "@/lib/tmdb";
 import { MetadataAuditModal, MetadataAuditLog, RequestTraceItem } from "@/components/common/MetadataAuditModal";
 
 const sessionOpenCountMap = new Map<string, { count: number; firstOpened: string }>();
@@ -158,148 +158,89 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
     };
   }, [isOpen, series]);
 
-  // Fetch TMDB Show ID
+  // Fetch TMDB Show ID with Multi-Variant Arabic Search Loop
   useEffect(() => {
     if (!isOpen || !series || tmdbId) return;
     if (!seriesInfo && loading) return;
 
     let isMounted = true;
     const userLang = getUserLanguage();
+    const { year } = cleanTitle(series.name);
+    const variants = generateArabicSearchVariants(series.name);
 
-    const { title, year } = cleanTitle(series.name);
+    async function executeSearchVariants() {
+      const sKey = `series_${series!.series_id}`;
+      const historyEntry = sessionOpenCountMap.get(sKey) || { count: 1, firstOpened: new Date().toLocaleTimeString() };
 
-    let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(title)}&language=${userLang}`;
-    if (year) searchUrl += `&year=${year}`;
+      for (let i = 0; i < variants.length; i++) {
+        if (!isMounted) return;
+        const queryVariant = variants[i];
 
-    const t0 = performance.now();
-    fetch(searchUrl)
-      .then(async (res) => {
-        const durationMs = Math.round(performance.now() - t0);
-        const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
-        const rawUpstream = res.headers.get("X-Upstream-Url");
-        const upstreamUrl = rawUpstream ? decodeURI(rawUpstream) : undefined;
-        const rawCacheKey = res.headers.get("X-Cache-Key");
-        const cacheKey = rawCacheKey ? decodeURIComponent(rawCacheKey) : undefined;
-        const data = res.ok ? await res.json() : null;
+        let searchUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(queryVariant)}&language=${userLang}`;
+        if (year) searchUrl += `&year=${year}`;
 
-        traceLogsRef.current.push({
-          id: Math.random().toString(36).substring(2, 9),
-          type: "tmdb_search",
-          label: "TMDB SEARCH",
-          proxyUrl: searchUrl,
-          upstreamUrl,
-          cacheKey,
-          cacheStatus,
-          status: res.status,
-          durationMs,
-          timestamp: new Date().toLocaleTimeString(),
-          rawResponse: data,
-        });
+        const t0 = performance.now();
+        try {
+          const res = await fetch(searchUrl);
+          const durationMs = Math.round(performance.now() - t0);
+          const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
+          const rawUpstream = res.headers.get("X-Upstream-Url");
+          const upstreamUrl = rawUpstream ? decodeURI(rawUpstream) : undefined;
+          const rawCacheKey = res.headers.get("X-Cache-Key");
+          const cacheKey = rawCacheKey ? decodeURIComponent(rawCacheKey) : undefined;
+          const data = res.ok ? await res.json() : null;
 
-        return data;
-      })
-      .then((data) => {
-        if (!isMounted || !data) return;
-        const results = data.results || [];
+          traceLogsRef.current.push({
+            id: Math.random().toString(36).substring(2, 9),
+            type: "tmdb_search",
+            label: i === 0 ? "TMDB SEARCH" : `TMDB VARIANT ${i + 1} SEARCH`,
+            proxyUrl: searchUrl,
+            upstreamUrl,
+            cacheKey,
+            cacheStatus,
+            status: res.status,
+            durationMs,
+            timestamp: new Date().toLocaleTimeString(),
+            rawResponse: data,
+          });
 
-        const sKey = `series_${series.series_id}`;
-        const historyEntry = sessionOpenCountMap.get(sKey) || { count: 1, firstOpened: new Date().toLocaleTimeString() };
+          if (!isMounted || !data) continue;
+          const results = data.results || [];
 
-        if (results.length > 0) {
-          const match = findBestMatch(results, title, year, "tv");
-          if (match && match.id) {
-            setTmdbId(match.id);
-
-            setAuditLog({
-              rawName: series.name,
-              cleanedTitle: title,
-              extractedYear: year,
-              source: "tmdb",
-              requestedLanguage: userLang,
-              tmdbId: match.id,
-              isRepeatShow: historyEntry.count > 1,
-              openCountInSession: historyEntry.count,
-              previousOpenTimestamp: historyEntry.firstOpened,
-              requestTraceLogs: [...traceLogsRef.current],
-              matchedCandidate: {
-                id: match.id,
-                name: match.name || match.title,
-                originalName: match.original_name || match.original_title,
-                releaseDate: match.first_air_date,
-              },
-              rawPayload: { searchResults: results, selectedSeries: series, traceLogs: [...traceLogsRef.current] },
-              timestamp: new Date().toLocaleTimeString(),
-            });
-            return;
-          }
-        }
-
-        const fallbackQuery = series.name
-          .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
-          .replace(/[\(\[].*?[\)\]]/g, "")
-          .trim();
-
-        if (fallbackQuery && fallbackQuery !== title) {
-          const fallbackUrl = `/api/proxy/tmdb?type=search_tv&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`;
-          const fbT0 = performance.now();
-          fetch(fallbackUrl)
-            .then(async (fbRes) => {
-              const fbDurationMs = Math.round(performance.now() - fbT0);
-              const fbCacheStatus = (fbRes.headers.get("X-Cache") as any) || "N/A";
-              const rawFbUpstream = fbRes.headers.get("X-Upstream-Url");
-              const fbUpstreamUrl = rawFbUpstream ? decodeURI(rawFbUpstream) : undefined;
-              const rawFbCacheKey = fbRes.headers.get("X-Cache-Key");
-              const fbCacheKey = rawFbCacheKey ? decodeURIComponent(rawFbCacheKey) : undefined;
-              const fbData = fbRes.ok ? await fbRes.json() : null;
-
-              traceLogsRef.current.push({
-                id: Math.random().toString(36).substring(2, 9),
-                type: "tmdb_search",
-                label: "TMDB FALLBACK SEARCH",
-                proxyUrl: fallbackUrl,
-                upstreamUrl: fbUpstreamUrl,
-                cacheKey: fbCacheKey,
-                cacheStatus: fbCacheStatus,
-                status: fbRes.status,
-                durationMs: fbDurationMs,
+          if (results.length > 0) {
+            const match = findBestMatch(results, queryVariant, year, "tv");
+            if (match && match.id) {
+              setTmdbId(match.id);
+              setAuditLog({
+                rawName: series!.name,
+                cleanedTitle: queryVariant,
+                extractedYear: year,
+                source: "tmdb",
+                requestedLanguage: userLang,
+                tmdbId: match.id,
+                isRepeatShow: historyEntry.count > 1,
+                openCountInSession: historyEntry.count,
+                previousOpenTimestamp: historyEntry.firstOpened,
+                requestTraceLogs: [...traceLogsRef.current],
+                matchedCandidate: {
+                  id: match.id,
+                  name: match.name || match.title,
+                  originalName: match.original_name || match.original_title,
+                  releaseDate: match.first_air_date,
+                },
+                rawPayload: { searchResults: results, selectedSeries: series, traceLogs: [...traceLogsRef.current] },
                 timestamp: new Date().toLocaleTimeString(),
-                rawResponse: fbData,
               });
-
-              return fbData;
-            })
-            .then((fbData) => {
-              if (!isMounted || !fbData) return;
-              const fbResults = fbData.results || [];
-              const fbMatch = findBestMatch(fbResults, fallbackQuery, year, "tv");
-              if (fbMatch && fbMatch.id) {
-                setTmdbId(fbMatch.id);
-                setAuditLog({
-                  rawName: series.name,
-                  cleanedTitle: fallbackQuery,
-                  extractedYear: year,
-                  source: "tmdb",
-                  requestedLanguage: userLang,
-                  tmdbId: fbMatch.id,
-                  isRepeatShow: historyEntry.count > 1,
-                  openCountInSession: historyEntry.count,
-                  previousOpenTimestamp: historyEntry.firstOpened,
-                  requestTraceLogs: [...traceLogsRef.current],
-                  matchedCandidate: {
-                    id: fbMatch.id,
-                    name: fbMatch.name || fbMatch.title,
-                    originalName: fbMatch.original_name || fbMatch.original_title,
-                    releaseDate: fbMatch.first_air_date,
-                  },
-                  rawPayload: { searchResults: fbResults, selectedSeries: series, traceLogs: [...traceLogsRef.current] },
-                  timestamp: new Date().toLocaleTimeString(),
-                });
-              }
-            })
-            .catch(() => {});
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("TMDB search variant failed:", queryVariant, err);
         }
-      })
-      .catch((err) => console.warn("TMDB search failed:", err));
+      }
+    }
+
+    executeSearchVariants();
 
     return () => {
       isMounted = false;

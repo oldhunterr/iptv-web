@@ -6,6 +6,8 @@ import {
   resolveMetadata,
   fetchTmdbFromApi,
   getTmdbApiKey,
+  normalizeArabicText,
+  generateArabicSearchVariants,
 } from "../../src/lib/tmdb";
 import { serverCache } from "../../src/lib/cache";
 import { GET, OPTIONS } from "../../src/app/api/proxy/tmdb/route";
@@ -31,6 +33,23 @@ describe("TMDB & Smart Metadata Resolver Unit Tests", () => {
       const res2 = cleanTitle("UK| Breaking Bad [4K]");
       expect(res2.title).toBe("Breaking Bad");
       expect(res2.year).toBeUndefined();
+    });
+  });
+
+  describe("Arabic Search Variant Generation & Normalization", () => {
+    it("should generate Hamza search variants for Arabic titles", () => {
+      const v1 = generateArabicSearchVariants("الام المتوحشة (2026)");
+      expect(v1).toContain("الام المتوحشة");
+      expect(v1).toContain("الأم المتوحشة");
+
+      const v2 = generateArabicSearchVariants("ابلة نورة (2008)");
+      expect(v2).toContain("ابلة نورة");
+      expect(v2).toContain("أبلة نورة");
+    });
+
+    it("should normalize Arabic characters for title matching", () => {
+      expect(normalizeArabicText("الأم المتوحشة")).toBe("الام المتوحشه");
+      expect(normalizeArabicText("أبلة نورة")).toBe("ابله نوره");
     });
   });
 

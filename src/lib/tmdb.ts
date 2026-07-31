@@ -57,6 +57,60 @@ export function hasRequiredXtreamMetadata(item: any): boolean {
 }
 
 /**
+ * Normalizes Arabic text by unifying Alif variants (أ, إ, آ -> ا),
+ * Ta Marbuta (ة -> ه), and Alif Maqsura (ى -> ي).
+ */
+export function normalizeArabicText(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Generates search variants for Arabic and multi-language titles.
+ * Produces hamza-normalized variants to find exact matches on TMDB even when
+ * IPTV titles use plain Alif (e.g., "الام المتوحشة" -> "الأم المتوحشة", "ابلة نورة" -> "أبلة نورة").
+ */
+export function generateArabicSearchVariants(rawName: string): string[] {
+  const { title } = cleanTitle(rawName);
+  if (!title) return [];
+
+  const variants: string[] = [title];
+  const hasArabic = /[\u0600-\u06FF]/.test(title);
+  if (!hasArabic) return variants;
+
+  // 1. Common specific Hamza substitutions
+  const hamzaSub = title
+    .replace(/(^|\s)الام(?=\s|$)/g, "$1الأم")
+    .replace(/(^|\s)ابلة(?=\s|$)/g, "$1أبلة")
+    .replace(/(^|\s)ان(?=\s|$)/g, "$1إن")
+    .replace(/(^|\s)انت(?=\s|$)/g, "$1أنت")
+    .replace(/(^|\s)ام(?=\s|$)/g, "$1أم")
+    .replace(/(^|\s)اخ(?=\s|$)/g, "$1أخ")
+    .replace(/(^|\s)اخت(?=\s|$)/g, "$1أخت")
+    .replace(/(^|\s)اب(?=\s|$)/g, "$1أب");
+
+  if (hamzaSub !== title && !variants.includes(hamzaSub)) {
+    variants.push(hamzaSub);
+  }
+
+  // 2. Generic Alif Hamza Above: replace initial 'ا' at start of words with 'أ'
+  const startAlifHamza = title
+    .replace(/(^|\s)الا/g, "$1الأ")
+    .replace(/(^|\s)ا/g, "$1أ");
+
+  if (startAlifHamza !== title && !variants.includes(startAlifHamza)) {
+    variants.push(startAlifHamza);
+  }
+
+  return variants;
+}
+
+/**
  * Smart matching algorithm to pick the best TMDB search result based on title similarity and release year.
  */
 export function findBestMatch(
@@ -68,6 +122,7 @@ export function findBestMatch(
   if (!results || results.length === 0) return null;
 
   const targetTitle = query.toLowerCase().trim();
+  const normalizedTargetTitle = normalizeArabicText(query);
   let bestItem: any = null;
   let maxScore = -1;
 
@@ -85,9 +140,11 @@ export function findBestMatch(
       .filter((n): n is string => Boolean(n) && typeof n === "string")
       .map((n) => n.toLowerCase().trim());
 
-    if (names.some((n) => n === targetTitle)) {
+    const normalizedNames = names.map((n) => normalizeArabicText(n));
+
+    if (names.some((n) => n === targetTitle) || normalizedNames.some((n) => n === normalizedTargetTitle)) {
       score += 100;
-    } else if (names.some((n) => n.includes(targetTitle) || targetTitle.includes(n))) {
+    } else if (names.some((n) => n.includes(targetTitle) || targetTitle.includes(n)) || normalizedNames.some((n) => n.includes(normalizedTargetTitle) || normalizedTargetTitle.includes(n))) {
       score += 50;
     } else {
       const targetWords = targetTitle.split(/\s+/).filter((w) => w.length > 1);

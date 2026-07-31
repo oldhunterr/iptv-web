@@ -6,7 +6,7 @@ import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 import { getUserLanguage } from "@/lib/profile-storage";
-import { findBestMatch } from "@/lib/tmdb";
+import { findBestMatch, generateArabicSearchVariants } from "@/lib/tmdb";
 import { MetadataAuditModal, MetadataAuditLog, RequestTraceItem } from "@/components/common/MetadataAuditModal";
 
 const sessionOpenCountMap = new Map<string, { count: number; firstOpened: string }>();
@@ -83,149 +83,89 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
     }
   }, [isOpen, movie]);
 
-  // Fetch TMDB Movie ID and Backdrop if tmdbId is not set
+  // Fetch TMDB Movie ID and Backdrop with Multi-Variant Arabic Search Loop
   useEffect(() => {
     if (!isOpen || !movie || tmdbId) return;
 
     let isMounted = true;
     const userLang = getUserLanguage();
-
     const rawTitle = movie.name || movie.title || "";
-    const { title, year } = cleanTitle(rawTitle);
+    const { year } = cleanTitle(rawTitle);
+    const variants = generateArabicSearchVariants(rawTitle);
 
-    let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(title)}&language=${userLang}`;
-    if (year) searchUrl += `&year=${year}`;
+    async function executeSearchVariants() {
+      const mKey = `movie_${movie!.stream_id || movie!.id || movie!.name}`;
+      const historyEntry = sessionOpenCountMap.get(mKey) || { count: 1, firstOpened: new Date().toLocaleTimeString() };
 
-    const t0 = performance.now();
-    fetch(searchUrl)
-      .then(async (res) => {
-        const durationMs = Math.round(performance.now() - t0);
-        const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
-        const rawUpstream = res.headers.get("X-Upstream-Url");
-        const upstreamUrl = rawUpstream ? decodeURI(rawUpstream) : undefined;
-        const rawCacheKey = res.headers.get("X-Cache-Key");
-        const cacheKey = rawCacheKey ? decodeURIComponent(rawCacheKey) : undefined;
-        const data = res.ok ? await res.json() : null;
+      for (let i = 0; i < variants.length; i++) {
+        if (!isMounted) return;
+        const queryVariant = variants[i];
 
-        traceLogsRef.current.push({
-          id: Math.random().toString(36).substring(2, 9),
-          type: "tmdb_search",
-          label: "TMDB MOVIE SEARCH",
-          proxyUrl: searchUrl,
-          upstreamUrl,
-          cacheKey,
-          cacheStatus,
-          status: res.status,
-          durationMs,
-          timestamp: new Date().toLocaleTimeString(),
-          rawResponse: data,
-        });
+        let searchUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(queryVariant)}&language=${userLang}`;
+        if (year) searchUrl += `&year=${year}`;
 
-        return data;
-      })
-      .then((data) => {
-        if (!isMounted || !data) return;
-        const results = data.results || [];
+        const t0 = performance.now();
+        try {
+          const res = await fetch(searchUrl);
+          const durationMs = Math.round(performance.now() - t0);
+          const cacheStatus = (res.headers.get("X-Cache") as any) || "N/A";
+          const rawUpstream = res.headers.get("X-Upstream-Url");
+          const upstreamUrl = rawUpstream ? decodeURI(rawUpstream) : undefined;
+          const rawCacheKey = res.headers.get("X-Cache-Key");
+          const cacheKey = rawCacheKey ? decodeURIComponent(rawCacheKey) : undefined;
+          const data = res.ok ? await res.json() : null;
 
-        const mKey = `movie_${movie.stream_id || movie.id || movie.name}`;
-        const historyEntry = sessionOpenCountMap.get(mKey) || { count: 1, firstOpened: new Date().toLocaleTimeString() };
+          traceLogsRef.current.push({
+            id: Math.random().toString(36).substring(2, 9),
+            type: "tmdb_search",
+            label: i === 0 ? "TMDB MOVIE SEARCH" : `TMDB MOVIE VARIANT ${i + 1} SEARCH`,
+            proxyUrl: searchUrl,
+            upstreamUrl,
+            cacheKey,
+            cacheStatus,
+            status: res.status,
+            durationMs,
+            timestamp: new Date().toLocaleTimeString(),
+            rawResponse: data,
+          });
 
-        if (results.length > 0) {
-          const match = findBestMatch(results, title, year, "movie");
-          if (match && match.id) {
-            setTmdbId(match.id);
-            setAuditLog({
-              rawName: rawTitle,
-              cleanedTitle: title,
-              extractedYear: year,
-              source: "tmdb",
-              requestedLanguage: userLang,
-              tmdbId: match.id,
-              isRepeatShow: historyEntry.count > 1,
-              openCountInSession: historyEntry.count,
-              previousOpenTimestamp: historyEntry.firstOpened,
-              requestTraceLogs: [...traceLogsRef.current],
-              matchedCandidate: {
-                id: match.id,
-                name: match.name || match.title,
-                originalName: match.original_name || match.original_title,
-                releaseDate: match.release_date,
-              },
-              rawPayload: { searchResults: results, selectedMovie: movie, traceLogs: [...traceLogsRef.current] },
-              timestamp: new Date().toLocaleTimeString(),
-            });
-            return;
-          }
-        }
+          if (!isMounted || !data) continue;
+          const results = data.results || [];
 
-        // Fallback: search raw name stripped of common tags if cleaned title returned 0 results
-        const rawName = movie.name || movie.title || "";
-        const fallbackQuery = rawName
-          .replace(/(مترجم|المترجم|مدبلج|المدبلج)/g, "")
-          .replace(/[\(\[].*?[\)\]]/g, "")
-          .trim();
-
-        if (fallbackQuery && fallbackQuery !== title) {
-          const fallbackUrl = `/api/proxy/tmdb?type=search&query=${encodeURIComponent(fallbackQuery)}&language=${userLang}`;
-          const fbT0 = performance.now();
-          fetch(fallbackUrl)
-            .then(async (fbRes) => {
-              const fbDurationMs = Math.round(performance.now() - fbT0);
-              const fbCacheStatus = (fbRes.headers.get("X-Cache") as any) || "N/A";
-              const rawFbUpstream = fbRes.headers.get("X-Upstream-Url");
-              const fbUpstreamUrl = rawFbUpstream ? decodeURI(rawFbUpstream) : undefined;
-              const rawFbCacheKey = fbRes.headers.get("X-Cache-Key");
-              const fbCacheKey = rawFbCacheKey ? decodeURIComponent(rawFbCacheKey) : undefined;
-              const fbData = fbRes.ok ? await fbRes.json() : null;
-
-              traceLogsRef.current.push({
-                id: Math.random().toString(36).substring(2, 9),
-                type: "tmdb_search",
-                label: "TMDB FALLBACK SEARCH",
-                proxyUrl: fallbackUrl,
-                upstreamUrl: fbUpstreamUrl,
-                cacheKey: fbCacheKey,
-                cacheStatus: fbCacheStatus,
-                status: fbRes.status,
-                durationMs: fbDurationMs,
+          if (results.length > 0) {
+            const match = findBestMatch(results, queryVariant, year, "movie");
+            if (match && match.id) {
+              setTmdbId(match.id);
+              setAuditLog({
+                rawName: rawTitle,
+                cleanedTitle: queryVariant,
+                extractedYear: year,
+                source: "tmdb",
+                requestedLanguage: userLang,
+                tmdbId: match.id,
+                isRepeatShow: historyEntry.count > 1,
+                openCountInSession: historyEntry.count,
+                previousOpenTimestamp: historyEntry.firstOpened,
+                requestTraceLogs: [...traceLogsRef.current],
+                matchedCandidate: {
+                  id: match.id,
+                  name: match.name || match.title,
+                  originalName: match.original_name || match.original_title,
+                  releaseDate: match.release_date,
+                },
+                rawPayload: { searchResults: results, selectedMovie: movie, traceLogs: [...traceLogsRef.current] },
                 timestamp: new Date().toLocaleTimeString(),
-                rawResponse: fbData,
               });
-
-              return fbData;
-            })
-            .then((fbData) => {
-              if (!isMounted || !fbData) return;
-              const fbResults = fbData.results || [];
-              const fbMatch = findBestMatch(fbResults, fallbackQuery, year, "movie");
-              if (fbMatch && fbMatch.id) {
-                setTmdbId(fbMatch.id);
-                setAuditLog({
-                  rawName: rawTitle,
-                  cleanedTitle: fallbackQuery,
-                  extractedYear: year,
-                  source: "tmdb",
-                  requestedLanguage: userLang,
-                  tmdbId: fbMatch.id,
-                  isRepeatShow: historyEntry.count > 1,
-                  openCountInSession: historyEntry.count,
-                  previousOpenTimestamp: historyEntry.firstOpened,
-                  requestTraceLogs: [...traceLogsRef.current],
-                  matchedCandidate: {
-                    id: fbMatch.id,
-                    name: fbMatch.name || fbMatch.title,
-                    originalName: fbMatch.original_name || fbMatch.original_title,
-                    releaseDate: fbMatch.release_date,
-                  },
-                  rawPayload: { searchResults: fbResults, selectedMovie: movie, traceLogs: [...traceLogsRef.current] },
-                  timestamp: new Date().toLocaleTimeString(),
-                });
-              }
-            })
-            .catch(() => {});
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("TMDB movie search variant failed:", queryVariant, err);
         }
-      })
-      .catch((err) => console.warn("TMDB search failed:", err));
+      }
+    }
+
+    executeSearchVariants();
 
     return () => {
       isMounted = false;
