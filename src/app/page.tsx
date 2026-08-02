@@ -268,6 +268,29 @@ export default function Home() {
       result = result.filter((item) => item.type === "live" && Boolean(item.epg_channel_id || item.tvg_id || (item as any).hasEpg));
     }
 
+    // 9b. Audio & Translation Tag Facet
+    if (filterOptions.audioLanguage && filterOptions.audioLanguage !== "all") {
+      const targetLang = filterOptions.audioLanguage.toLowerCase();
+      result = result.filter((item) => {
+        const titleStr = (item.title || item.name || "").toLowerCase();
+        const catStr = (item.category_name || item.group_title || "").toLowerCase();
+
+        if (targetLang === "dubbed") {
+          return titleStr.includes("مدبلج") || catStr.includes("مدبلج") || titleStr.includes("dubbed");
+        }
+        if (targetLang === "subtitled") {
+          return titleStr.includes("مترجم") || catStr.includes("مترجم") || titleStr.includes("subbed") || titleStr.includes("subtitled");
+        }
+        if (targetLang === "arabic") {
+          return /[\u0600-\u06FF]/.test(titleStr) || catStr.includes("arabic") || catStr.includes("عربي") || catStr.includes("عربى");
+        }
+        if (targetLang === "english") {
+          return catStr.includes("english") || catStr.includes("en") || catStr.includes("us") || catStr.includes("uk");
+        }
+        return true;
+      });
+    }
+
     // 10. Watched Status Filter
     if (filterOptions.watchedStatus !== "all") {
       result = result.filter((item) => {

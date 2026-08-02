@@ -178,6 +178,7 @@ export interface ContentFilterOptions {
   watchedStatus: WatchedFilterStatus;
   streamType?: "all" | "live" | "movies" | "series";
   resolution?: "all" | "4K" | "1080p" | "720p";
+  audioLanguage?: "all" | "dubbed" | "subtitled" | "arabic" | "english";
   hasEpg?: boolean;
   onlyDownloaded: boolean;
   sortBy: SortField;

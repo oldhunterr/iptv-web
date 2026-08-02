@@ -82,6 +82,7 @@ export const DEFAULT_FILTER_OPTIONS: ContentFilterOptions = {
   watchedStatus: "all",
   streamType: "all",
   resolution: "all",
+  audioLanguage: "all",
   hasEpg: false,
   onlyDownloaded: false,
   sortBy: "default",

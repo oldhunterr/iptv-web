@@ -329,6 +329,32 @@ export const AdvancedFilterBar: React.FC<AdvancedFilterBarProps> = ({
               <option value="added_desc">Recently Added</option>
             </select>
           </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-400 block mb-1.5">Audio &amp; Translation Tag</label>
+            <div className="grid grid-cols-3 gap-1 text-[11px]">
+              {[
+                { id: "all", label: "All" },
+                { id: "dubbed", label: "مدبلج (Dubbed)" },
+                { id: "subtitled", label: "مترجم (Sub)" },
+                { id: "arabic", label: "Arabic" },
+                { id: "english", label: "English" },
+              ].map((lang) => (
+                <button
+                  key={lang.id}
+                  onClick={() => onChange({ audioLanguage: lang.id as any })}
+                  data-testid={`audio-language-${lang.id}`}
+                  className={`py-1 px-1.5 truncate font-medium rounded-lg border transition-all ${
+                    (filterOptions.audioLanguage || "all") === lang.id
+                      ? "bg-purple-600/20 border-purple-500 text-purple-300"
+                      : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {lang.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
