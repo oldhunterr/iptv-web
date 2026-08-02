@@ -15,6 +15,7 @@ const sessionOpenCountMap = new Map<string, { count: number; firstOpened: string
 
 interface SeriesDetailsModalProps {
   series: Series | null;
+  downloadedStreamIds?: Set<string | number>;
   isOpen: boolean;
   onClose: () => void;
   onPlayEpisode: (series: Series, seasonNum: number, episode: Episode) => void;
@@ -22,6 +23,7 @@ interface SeriesDetailsModalProps {
 
 export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
   series,
+  downloadedStreamIds,
   isOpen,
   onClose,
   onPlayEpisode,
@@ -802,6 +804,7 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                 seasonNum={selectedSeason}
                 seriesTitle={series.name}
                 poster={series.cover}
+                downloadedStreamIds={downloadedStreamIds}
                 onPlayEpisode={handlePlayEpisodeClick}
               />
             )}

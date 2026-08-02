@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Play, Check, Trash2 } from "lucide-react";
+import { Play, Check, Trash2, Download, HardDrive } from "lucide-react";
 import { Episode } from "@/types/iptv";
 import { getWatchProgress, removeFromHistory } from "@/lib/storage";
 
@@ -11,6 +11,7 @@ interface EpisodeListProps {
   seasonNum: number;
   seriesTitle: string;
   poster?: string;
+  downloadedStreamIds?: Set<string | number>;
   onPlayEpisode: (episode: Episode) => void;
 }
 
@@ -20,8 +21,41 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
   seasonNum,
   seriesTitle,
   poster,
+  downloadedStreamIds,
   onPlayEpisode,
 }) => {
+  const handleDownloadEpisode = async (ep: Episode) => {
+    const streamId = ep.id;
+    const title = `${seriesTitle} — S${seasonNum < 10 ? "0" : ""}${seasonNum}E${
+      ep.episode_num < 10 ? "0" : ""
+    }${ep.episode_num} · ${ep.title || "Episode"}`;
+    const containerExtension = ep.container_extension || "mp4";
+    const thumbUrl = ep.info?.movie_image || ep.cover_big || poster;
+
+    try {
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          streamId,
+          type: "series",
+          title,
+          containerExtension,
+          poster: thumbUrl,
+        }),
+      });
+
+      if (res.ok) {
+        alert("Episode download started! Check Settings > Downloads for progress.");
+      } else {
+        const data = await res.json();
+        alert(`Download failed: ${data.error || "Server error"}`);
+      }
+    } catch (err: any) {
+      alert(`Download failed: ${err.message}`);
+    }
+  };
   if (!episodes || episodes.length === 0) {
     return (
       <div className="py-12 text-center text-theme-muted">
@@ -103,14 +137,36 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
 
               {/* Action Buttons */}
               <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-border-subtle/80">
-                <button
-                  onClick={() => onPlayEpisode(ep)}
-                  data-testid={`play-episode-${ep.episode_num}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-primary hover:bg-accent-hover text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  {percent > 0 ? `Resume (${percent}%)` : "Play Episode"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onPlayEpisode(ep)}
+                    data-testid={`play-episode-${ep.episode_num}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-primary hover:bg-accent-hover text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    {percent > 0 ? `Resume (${percent}%)` : "Play Episode"}
+                  </button>
+
+                  {downloadedStreamIds && downloadedStreamIds.has(String(ep.id)) ? (
+                    <span
+                      title="Episode Downloaded Offline"
+                      data-testid={`episode-downloaded-${ep.episode_num}`}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-emerald-950/90 text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/50"
+                    >
+                      <HardDrive className="w-3.5 h-3.5" />
+                      <span>Downloaded</span>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleDownloadEpisode(ep)}
+                      title="Download Episode Offline"
+                      data-testid={`download-episode-${ep.episode_num}`}
+                      className="p-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/60 rounded-lg transition-colors border border-cyan-500/30"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
 
                 {historyItem && (
                   <button

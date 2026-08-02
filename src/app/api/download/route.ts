@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // 2. Completed File Streaming Mode
+  // 2. Completed File Streaming Mode (Supports HTTP 206 Range Seeking)
   if (isFile && id) {
     const task = getServerDownloadTask(id);
     if (!task || !task.filePath || !fs.existsSync(task.filePath)) {
@@ -63,15 +63,49 @@ export async function GET(request: NextRequest) {
     }
 
     const stat = fs.statSync(task.filePath);
-    const fileStream = fs.createReadStream(task.filePath);
+    const fileSize = stat.size;
+    const range = request.headers.get("range");
 
-    return new NextResponse(fileStream as any, {
-      headers: {
-        "Content-Type": `video/${task.containerExtension || "mp4"}`,
-        "Content-Length": String(stat.size),
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(task.title)}.${task.containerExtension}"`,
-      },
-    });
+    const ext = task.containerExtension || "mp4";
+    const contentType = ext === "mkv" ? "video/x-matroska" : ext === "webm" ? "video/webm" : `video/${ext}`;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (isNaN(start) || start >= fileSize) {
+        return new Response("Requested range not satisfiable", {
+          status: 416,
+          headers: { "Content-Range": `bytes */${fileSize}` },
+        });
+      }
+
+      const chunksize = end - start + 1;
+      const fileStream = fs.createReadStream(task.filePath, { start, end });
+
+      return new Response(fileStream as any, {
+        status: 206,
+        headers: {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(chunksize),
+          "Content-Type": contentType,
+          "Cache-Control": "no-cache",
+        },
+      });
+    } else {
+      const fileStream = fs.createReadStream(task.filePath);
+      return new Response(fileStream as any, {
+        status: 200,
+        headers: {
+          "Content-Length": String(fileSize),
+          "Accept-Ranges": "bytes",
+          "Content-Type": contentType,
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
   }
 
   // 3. JSON Tasks List Mode

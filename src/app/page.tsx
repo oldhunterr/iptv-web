@@ -694,6 +694,7 @@ export default function Home() {
       {/* Series Details Modal */}
       <SeriesDetailsModal
         series={selectedSeries}
+        downloadedStreamIds={downloadedStreamIds}
         isOpen={!!selectedSeries}
         onClose={() => setSelectedSeries(null)}
         onPlayEpisode={handlePlayEpisode}
