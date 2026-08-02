@@ -23,6 +23,7 @@ interface ControlsOverlayProps {
   isMuted: boolean;
   playbackSpeed: number;
   isFullscreen: boolean;
+  isOfflineLocalFile?: boolean;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onVolumeChange: (vol: number) => void;
@@ -53,6 +54,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
   isMuted,
   playbackSpeed,
   isFullscreen,
+  isOfflineLocalFile,
   onTogglePlay,
   onSeek,
   onVolumeChange,
@@ -76,9 +78,20 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({
     >
       {/* Top Bar */}
       <div className="flex items-center justify-between text-white">
-        <h2 className="text-base sm:text-lg font-semibold truncate max-w-[80%]" data-testid="player-title">
-          {title}
-        </h2>
+        <div className="flex items-center gap-3 truncate max-w-[80%]">
+          <h2 className="text-base sm:text-lg font-semibold truncate" data-testid="player-title">
+            {title}
+          </h2>
+          {isOfflineLocalFile && (
+            <span
+              data-testid="offline-player-badge"
+              className="shrink-0 px-2.5 py-0.5 bg-emerald-950/90 border border-emerald-500/60 text-emerald-400 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-lg shadow-emerald-950/50"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>LOCAL OFFLINE FILE</span>
+            </span>
+          )}
+        </div>
         {onClose && (
           <button
             onClick={onClose}

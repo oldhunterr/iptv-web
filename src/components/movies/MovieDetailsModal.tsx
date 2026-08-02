@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { X, Star, Heart, Play, Terminal, Download } from "lucide-react";
+import { X, Star, Heart, Play, Terminal, Download, HardDrive } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
@@ -14,6 +14,7 @@ const sessionOpenCountMap = new Map<string, { count: number; firstOpened: string
 
 interface MovieDetailsModalProps {
   movie: CatalogItem | null;
+  isDownloaded?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onPlay: (movie: CatalogItem) => void;
@@ -21,6 +22,7 @@ interface MovieDetailsModalProps {
 
 export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   movie,
+  isDownloaded,
   isOpen,
   onClose,
   onPlay,
@@ -414,43 +416,53 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                   Play Movie
                 </button>
 
-                <button
-                  onClick={async () => {
-                    const streamId = movie.stream_id || movie.id || "movie";
-                    const title = movie.name || movie.title || "Movie Download";
-                    const containerExtension = movie.container_extension || "mp4";
-                    const poster = movie.stream_icon || movie.poster;
+                {isDownloaded ? (
+                  <div
+                    data-testid="movie-downloaded-offline-badge"
+                    className="flex items-center gap-2 bg-emerald-950/90 border border-emerald-500/60 text-emerald-400 px-5 py-3.5 rounded-xl font-bold text-base shadow-lg shadow-emerald-950/50"
+                  >
+                    <HardDrive className="w-5 h-5 text-emerald-400" />
+                    <span>Downloaded Offline (Local File)</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      const streamId = movie.stream_id ?? movie.id;
+                      const title = movie.name || movie.title || "Movie Download";
+                      const containerExtension = movie.container_extension || "mp4";
+                      const poster = movie.stream_icon || movie.poster;
 
-                    try {
-                      const res = await fetch("/api/download", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          action: "start",
-                          streamId,
-                          type: "movie",
-                          title,
-                          containerExtension,
-                          poster,
-                        }),
-                      });
+                      try {
+                        const res = await fetch("/api/download", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            action: "start",
+                            streamId,
+                            type: "movie",
+                            title,
+                            containerExtension,
+                            poster,
+                          }),
+                        });
 
-                      if (res.ok) {
-                        alert("Server-side download started! Check Settings > Downloads for live progress.");
-                      } else {
-                        const data = await res.json();
-                        alert(`Download failed: ${data.error || "Server error"}`);
+                        if (res.ok) {
+                          alert("Server-side download started! Check Settings > Downloads for live progress.");
+                        } else {
+                          const data = await res.json();
+                          alert(`Download failed: ${data.error || "Server error"}`);
+                        }
+                      } catch (err: any) {
+                        alert(`Download failed: ${err.message}`);
                       }
-                    } catch (err: any) {
-                      alert(`Download failed: ${err.message}`);
-                    }
-                  }}
-                  data-testid="movie-download-offline-button"
-                  className="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 px-5 py-3.5 rounded-xl font-bold text-base transition-all hover:scale-105"
-                >
-                  <Download className="w-5 h-5" />
-                  <span>Download Offline</span>
-                </button>
+                    }}
+                    data-testid="movie-download-offline-button"
+                    className="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 px-5 py-3.5 rounded-xl font-bold text-base transition-all hover:scale-105"
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>Download Offline</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

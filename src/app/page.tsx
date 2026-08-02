@@ -506,6 +506,16 @@ export default function Home() {
     });
   };
 
+  const downloadedStreamIds = useMemo(() => {
+    const ids = new Set<string | number>();
+    downloadQueue.items.forEach((item) => {
+      if (item.status === "completed" && item.streamId) {
+        ids.add(String(item.streamId));
+      }
+    });
+    return ids;
+  }, [downloadQueue.items]);
+
   return (
     <div
       data-testid="app-dashboard"
@@ -666,7 +676,11 @@ export default function Home() {
           </div>
         ) : (
           /* Catalog Virtualized Grid */
-          <VirtualizedGrid items={filteredCatalogItems} onSelectItem={handleSelectItem} />
+          <VirtualizedGrid
+            items={filteredCatalogItems}
+            downloadedStreamIds={downloadedStreamIds}
+            onSelectItem={handleSelectItem}
+          />
         )}
       </main>
 
@@ -688,6 +702,10 @@ export default function Home() {
       {/* Movie Details Modal */}
       <MovieDetailsModal
         movie={selectedMovie}
+        isDownloaded={Boolean(
+          selectedMovie &&
+            downloadedStreamIds.has(String(selectedMovie.stream_id ?? selectedMovie.id))
+        )}
         isOpen={!!selectedMovie}
         onClose={() => setSelectedMovie(null)}
         onPlay={handlePlayMovie}

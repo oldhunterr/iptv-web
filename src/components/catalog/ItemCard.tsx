@@ -1,17 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
-import { Play, Star, Heart, Tv, Film, Check } from "lucide-react";
+import { Play, Star, Heart, Tv, Film, Check, HardDrive } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite, getWatchProgress, getSeriesProgress } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
 
 interface ItemCardProps {
   item: CatalogItem;
+  isDownloaded?: boolean;
   onSelect: (item: CatalogItem) => void;
 }
 
-export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
+export const ItemCard: React.FC<ItemCardProps> = ({ item, isDownloaded, onSelect }) => {
   const itemId = item.type === "series" ? item.series_id : item.stream_id;
   const itemKey = `${item.type}_${itemId}`;
 
@@ -108,6 +109,16 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
 
         {/* Badges Container (Top Right) */}
         <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+          {isDownloaded && (
+            <div
+              data-testid="downloaded-badge"
+              className="flex items-center gap-1 px-2 py-0.5 bg-emerald-950/90 text-emerald-400 backdrop-blur-md rounded-md text-[11px] font-bold border border-emerald-500/50 shadow"
+            >
+              <HardDrive className="w-3 h-3 stroke-[2.5]" />
+              <span>Downloaded</span>
+            </div>
+          )}
+
           {isWatched && (
             <div
               data-testid="watched-badge"

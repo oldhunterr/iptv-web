@@ -7,10 +7,11 @@ import { ItemCard } from "./ItemCard";
 
 interface VirtualizedGridProps {
   items: CatalogItem[];
+  downloadedStreamIds?: Set<string | number>;
   onSelectItem: (item: CatalogItem) => void;
 }
 
-export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelectItem }) => {
+export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, downloadedStreamIds, onSelectItem }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(5);
   const [visibleCount, setVisibleCount] = useState(120);
@@ -108,11 +109,15 @@ export const VirtualizedGrid: React.FC<VirtualizedGridProps> = ({ items, onSelec
               className="transition-all"
             >
               {rowItems.map((item, idx) => {
-                const itemId = item.type === "series" ? item.series_id : item.stream_id;
+                const itemId = item.type === "series" ? (item.series_id ?? item.id) : (item.stream_id ?? item.id);
+                const isDownloaded = Boolean(
+                  downloadedStreamIds && itemId !== undefined && downloadedStreamIds.has(String(itemId))
+                );
                 return (
                   <ItemCard
                     key={`${item.type}_${itemId}_${startIndex + idx}`}
                     item={item}
+                    isDownloaded={isDownloaded}
                     onSelect={onSelectItem}
                   />
                 );

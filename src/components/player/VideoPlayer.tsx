@@ -76,8 +76,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const video = videoRef.current;
     if (!video || !src) return;
 
-    const isHls = src.includes(".m3u8") || containerExtension === "m3u8";
-    const isTs = src.includes(".ts") || containerExtension === "ts";
+    const isOfflineLocalFile = src.includes("/api/download");
+    const isHls = !isOfflineLocalFile && (src.includes(".m3u8") || containerExtension === "m3u8");
+    const isTs = !isOfflineLocalFile && (src.includes(".ts") || containerExtension === "ts");
 
     if (isHls && Hls.isSupported()) {
       if (hlsRef.current) {
@@ -472,6 +473,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         isMuted={isMuted}
         playbackSpeed={playbackSpeed}
         isFullscreen={isFullscreen}
+        isOfflineLocalFile={src.includes("/api/download")}
         onTogglePlay={togglePlay}
         onSeek={handleSeek}
         onVolumeChange={handleVolumeChange}
