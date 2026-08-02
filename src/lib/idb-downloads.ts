@@ -118,7 +118,8 @@ export async function startRealDownloadProcess(downloadId: string): Promise<void
   if (itemIndex < 0) return;
 
   const item = queueState.items[itemIndex];
-  const targetUrl = getStreamUrl("movies", item.streamId, item.containerExtension);
+  const streamType = item.section === "series" ? "series" : "movie";
+  const targetUrl = getStreamUrl(streamType, item.streamId, item.containerExtension);
 
   // Update item status to downloading
   item.status = "downloading";
@@ -130,12 +131,19 @@ export async function startRealDownloadProcess(downloadId: string): Promise<void
 
   const startTime = Date.now();
   let receivedBytes = 0;
-  const chunks: Uint8Array[] = [];
+  const chunks: BlobPart[] = [];
 
   try {
     const res = await fetch(targetUrl);
     if (!res.ok || !res.body) {
-      throw new Error(`HTTP fetch failed with status ${res.status}`);
+      const errJson = await res.json().catch(() => null);
+      throw new Error(errJson?.error || `HTTP stream fetch failed (${res.status} ${res.statusText})`);
+    }
+
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error(errJson?.error || "Upstream server returned error payload instead of video stream");
     }
 
     const contentLengthHeader = res.headers.get("content-length");
