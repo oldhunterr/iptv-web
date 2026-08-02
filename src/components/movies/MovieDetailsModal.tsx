@@ -416,31 +416,34 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
 
                 <button
                   onClick={async () => {
-                    const queue = getDownloadQueueState();
-                    const newId = `dl_${Date.now()}`;
-                    const newItem: IDBDownloadItem = {
-                      id: newId,
-                      streamId: movie.stream_id || movie.id || "movie",
-                      section: "movies",
-                      title: movie.name || movie.title || "Movie Download",
-                      poster: movie.stream_icon || movie.poster,
-                      containerExtension: movie.container_extension || "mp4",
-                      status: "queued",
-                      bytesDownloaded: 0,
-                      totalBytes: 0,
-                      progressPercent: 0,
-                      downloadSpeedBps: 0,
-                      etaSeconds: 0,
-                      downloadedAt: Date.now(),
-                      expiresAt: Date.now() + 86400000 * 30,
-                      xtreamCredentialsHash: "user_hash",
-                      retryCount: 0,
-                    };
-                    queue.items.push(newItem);
-                    saveDownloadQueueState(queue);
+                    const streamId = movie.stream_id || movie.id || "movie";
+                    const title = movie.name || movie.title || "Movie Download";
+                    const containerExtension = movie.container_extension || "mp4";
+                    const poster = movie.stream_icon || movie.poster;
 
-                    const { startRealDownloadProcess } = await import("@/lib/idb-downloads");
-                    startRealDownloadProcess(newId);
+                    try {
+                      const res = await fetch("/api/download", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          action: "start",
+                          streamId,
+                          type: "movie",
+                          title,
+                          containerExtension,
+                          poster,
+                        }),
+                      });
+
+                      if (res.ok) {
+                        alert("Server-side download started! Check Settings > Downloads for live progress.");
+                      } else {
+                        const data = await res.json();
+                        alert(`Download failed: ${data.error || "Server error"}`);
+                      }
+                    } catch (err: any) {
+                      alert(`Download failed: ${err.message}`);
+                    }
                   }}
                   data-testid="movie-download-offline-button"
                   className="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 px-5 py-3.5 rounded-xl font-bold text-base transition-all hover:scale-105"

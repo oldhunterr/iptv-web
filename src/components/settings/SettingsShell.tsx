@@ -115,24 +115,81 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
     saveDownloadQueueState(next);
   };
 
-  const handleDeleteDownloadItem = (id: string) => {
+  useEffect(() => {
+    let intervalId: any;
+
+    const pollServerDownloads = async () => {
+      try {
+        const res = await fetch("/api/download");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.tasks)) {
+            setDownloadQueue((prev) => {
+              const serverItems: IDBDownloadItem[] = data.tasks.map((st: any) => ({
+                id: st.id,
+                streamId: st.streamId,
+                section: st.type === "series" ? "series" : "movies",
+                title: st.title,
+                poster: st.poster,
+                containerExtension: st.containerExtension || "mp4",
+                status: st.status,
+                bytesDownloaded: st.bytesDownloaded,
+                totalBytes: st.totalBytes,
+                progressPercent: st.progressPercent,
+                downloadSpeedBps: st.downloadSpeedBps,
+                etaSeconds: st.etaSeconds,
+                downloadedAt: st.downloadedAt,
+                expiresAt: st.downloadedAt + 86400000 * 30,
+                xtreamCredentialsHash: "server",
+                retryCount: 0,
+              }));
+
+              const activeTask = data.tasks.find((t: any) => t.status === "downloading");
+
+              return {
+                ...prev,
+                items: serverItems,
+                activeDownloadId: activeTask ? activeTask.id : null,
+                isDownloading: Boolean(activeTask),
+                globalSpeedBps: activeTask ? activeTask.downloadSpeedBps : 0,
+              };
+            });
+          }
+        }
+      } catch {}
+    };
+
+    pollServerDownloads();
+    intervalId = setInterval(pollServerDownloads, 1000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const handleDeleteDownloadItem = async (id: string) => {
+    try {
+      await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id }),
+      });
+    } catch {}
     const nextItems = downloadQueue.items.filter((item) => item.id !== id);
     const next = { ...downloadQueue, items: nextItems };
     setDownloadQueue(next);
     saveDownloadQueueState(next);
   };
 
-  const handleTogglePauseDownload = (id: string) => {
-    const nextItems = downloadQueue.items.map((item) => {
-      if (item.id === id) {
-        const nextStatus = item.status === "downloading" ? "paused" : "downloading";
-        return { ...item, status: nextStatus as IDBDownloadItem["status"] };
-      }
-      return item;
-    });
-    const next = { ...downloadQueue, items: nextItems };
-    setDownloadQueue(next);
-    saveDownloadQueueState(next);
+  const handleTogglePauseDownload = async (id: string) => {
+    const item = downloadQueue.items.find((it) => it.id === id);
+    const action = item?.status === "downloading" ? "pause" : "resume";
+
+    try {
+      await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, id }),
+      });
+    } catch {}
   };
 
   const handleSaveFilters = (updated: Partial<ContentFilterOptions>) => {
@@ -781,9 +838,15 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
                         {/* Status Badge & Action Controls */}
                         <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                           {isCompleted && (
-                            <span className="flex items-center gap-1 text-xs px-2.5 py-1 bg-emerald-950/80 border border-emerald-800 text-emerald-400 font-bold rounded-xl">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Completed
-                            </span>
+                            <a
+                              href={`/api/download/file?id=${item.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid={`download-file-button-${item.id}`}
+                              className="flex items-center gap-1 text-xs px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800 text-emerald-400 font-bold rounded-xl transition-all"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Save File
+                            </a>
                           )}
 
                           {item.status === "queued" && (
