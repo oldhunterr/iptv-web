@@ -4,6 +4,7 @@ import http from "http";
 import https from "https";
 import { Transform } from "stream";
 import { pipeline } from "stream/promises";
+import { spawn, execSync } from "child_process";
 import { buildUpstreamStreamUrl } from "@/lib/xtream-client";
 
 export interface ServerDownloadTask {
@@ -22,11 +23,26 @@ export interface ServerDownloadTask {
   filePath?: string;
   errorReason?: string;
   downloadedAt: number;
+  engineUsed?: "aria2c" | "native_multi_range";
 }
 
 // In-memory registry of server download tasks
 const taskMap = new Map<string, ServerDownloadTask>();
 const abortControllers = new Map<string, AbortController>();
+const activeProcesses = new Map<string, any>();
+
+let cachedAria2cAvailable: boolean | null = null;
+
+export function checkAria2cAvailable(): boolean {
+  if (cachedAria2cAvailable !== null) return cachedAria2cAvailable;
+  try {
+    execSync("aria2c --version", { stdio: "ignore" });
+    cachedAria2cAvailable = true;
+  } catch {
+    cachedAria2cAvailable = false;
+  }
+  return cachedAria2cAvailable;
+}
 
 function getDownloadDir(): string {
   const dir = path.join(process.cwd(), ".downloads");
@@ -68,6 +84,7 @@ export async function createServerDownloadTask(params: {
     downloadSpeedBps: 0,
     etaSeconds: 0,
     downloadedAt: Date.now(),
+    engineUsed: checkAria2cAvailable() ? "aria2c" : "native_multi_range",
   };
 
   taskMap.set(id, task);
@@ -88,7 +105,7 @@ class ProgressTransform extends Transform {
   private lastUpdate = 0;
 
   constructor(taskId: string, initialBytes = 0) {
-    super({ highWaterMark: 1024 * 1024 }); // 1MB highWaterMark buffer for maximum streaming speed
+    super({ highWaterMark: 1024 * 1024 });
     this.taskId = taskId;
     this.initialBytes = initialBytes;
     this.receivedBytes = initialBytes;
@@ -100,7 +117,6 @@ class ProgressTransform extends Transform {
     const task = taskMap.get(this.taskId);
     const now = Date.now();
 
-    // Throttle UI task metadata updates to every 250ms for maximum efficiency
     if (task && now - this.lastUpdate > 250) {
       this.lastUpdate = now;
       const elapsedTime = (now - this.startTime) / 1000;
@@ -145,7 +161,6 @@ function fetchStreamWithRedirects(
       targetUrl,
       { headers },
       (res) => {
-        // Handle HTTP 301, 302, 303, 307, 308 Redirects
         if (
           res.statusCode &&
           [301, 302, 303, 307, 308].includes(res.statusCode) &&
@@ -171,7 +186,126 @@ function fetchStreamWithRedirects(
   });
 }
 
+/**
+ * Executes download using aria2c child process with multi-connection parallelism if available,
+ * otherwise falls back to native multi-retry Range streaming engine.
+ */
 async function executeServerDownload(id: string): Promise<void> {
+  const task = taskMap.get(id);
+  if (!task) return;
+
+  const upstreamUrl = buildUpstreamStreamUrl(task.type, String(task.streamId), task.containerExtension);
+  const downloadDir = getDownloadDir();
+  const fileName = `${id}.${task.containerExtension}`;
+  const filePath = path.join(downloadDir, fileName);
+  task.filePath = filePath;
+
+  if (checkAria2cAvailable()) {
+    task.engineUsed = "aria2c";
+    return executeAria2cDownload(id, upstreamUrl, downloadDir, fileName);
+  }
+
+  task.engineUsed = "native_multi_range";
+  return executeNativeRangeDownload(id, upstreamUrl, filePath);
+}
+
+/**
+ * aria2c Multi-Connection Downloader Process Executor
+ */
+function executeAria2cDownload(
+  id: string,
+  upstreamUrl: string,
+  downloadDir: string,
+  fileName: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const task = taskMap.get(id);
+    if (!task) return resolve();
+
+    task.status = "downloading";
+
+    const args = [
+      "-s", "8",                  // 8 connections per server
+      "-x", "8",                  // 8 max connections per task
+      "-k", "1M",                 // 1MB min split size
+      "--continue=true",          // Auto-resume partial downloads
+      "--summary-interval=1",     // Output status every 1s
+      "--user-agent=VLC/3.0.18 LibVLC/3.0.18",
+      "--dir", downloadDir,
+      "--out", fileName,
+      upstreamUrl,
+    ];
+
+    const child = spawn("aria2c", args);
+    activeProcesses.set(id, child);
+
+    child.stdout.on("data", (data: Buffer) => {
+      const line = data.toString();
+      // Parse aria2c stdout line, e.g.:
+      // [#12345 291MiB/1.6GiB(17%) CN:8 DL:15MiB ETA:1m20s]
+      const match = line.match(/\((\d+)%\)\s+CN:\d+\s+DL:([0-9.]+\s*[KMG]?i?B?)\s+ETA:(?:(\d+m)?(\d+s)?)?/i);
+      if (match && task) {
+        task.progressPercent = parseInt(match[1], 10);
+
+        // Parse speed string (e.g. 15MiB, 1.2MiB, 800KiB)
+        const speedStr = match[2].trim().toUpperCase();
+        let speedBps = 0;
+        if (speedStr.includes("GIB") || speedStr.includes("GB")) {
+          speedBps = parseFloat(speedStr) * 1024 * 1024 * 1024;
+        } else if (speedStr.includes("MIB") || speedStr.includes("MB")) {
+          speedBps = parseFloat(speedStr) * 1024 * 1024;
+        } else if (speedStr.includes("KIB") || speedStr.includes("KB")) {
+          speedBps = parseFloat(speedStr) * 1024;
+        } else {
+          speedBps = parseFloat(speedStr);
+        }
+        task.downloadSpeedBps = Math.round(speedBps);
+
+        // Update file size & downloaded bytes
+        if (task.filePath && fs.existsSync(task.filePath)) {
+          const currentSize = fs.statSync(task.filePath).size;
+          task.bytesDownloaded = currentSize;
+          if (task.progressPercent > 0) {
+            task.totalBytes = Math.round((currentSize / task.progressPercent) * 100);
+          }
+        }
+      }
+    });
+
+    child.on("close", (code) => {
+      activeProcesses.delete(id);
+      if (code === 0) {
+        task.status = "completed";
+        task.progressPercent = 100;
+        task.downloadSpeedBps = 0;
+        task.etaSeconds = 0;
+        if (task.filePath && fs.existsSync(task.filePath)) {
+          task.bytesDownloaded = fs.statSync(task.filePath).size;
+          task.totalBytes = task.bytesDownloaded;
+        }
+        resolve();
+      } else if (task.status === "paused") {
+        resolve();
+      } else {
+        task.status = "failed";
+        task.errorReason = `aria2c process exited with code ${code}`;
+        resolve();
+      }
+    });
+
+    child.on("error", (err) => {
+      activeProcesses.delete(id);
+      console.warn(`[ServerDownloader] aria2c process error: ${err.message}. Falling back to native downloader.`);
+      // Fallback to native Range downloader
+      executeNativeRangeDownload(id, upstreamUrl, task.filePath!).then(resolve).catch(reject);
+    });
+  });
+}
+
+/**
+ * Native Multi-Retry Range Downloader (Used when aria2c is not installed)
+ */
+async function executeNativeRangeDownload(id: string, upstreamUrl: string, filePath: string): Promise<void> {
   const task = taskMap.get(id);
   if (!task) return;
 
@@ -179,12 +313,6 @@ async function executeServerDownload(id: string): Promise<void> {
   abortControllers.set(id, controller);
 
   task.status = "downloading";
-
-  const upstreamUrl = buildUpstreamStreamUrl(task.type, String(task.streamId), task.containerExtension);
-  const downloadDir = getDownloadDir();
-  const fileName = `${id}.${task.containerExtension}`;
-  const filePath = path.join(downloadDir, fileName);
-  task.filePath = filePath;
 
   const maxRetries = 10;
   let attempt = 0;
@@ -232,7 +360,7 @@ async function executeServerDownload(id: string): Promise<void> {
         task.totalBytes = existingBytes + streamContentLength;
       } else if (res.statusCode === 200 && streamContentLength > 0) {
         task.totalBytes = streamContentLength;
-        existingBytes = 0; // Upstream doesn't support Range, start fresh
+        existingBytes = 0;
       }
 
       const writeFlags = existingBytes > 0 && res.statusCode === 206 ? "a" : "w";
@@ -241,7 +369,6 @@ async function executeServerDownload(id: string): Promise<void> {
 
       await pipeline(res, progressStream, fileStream);
 
-      // Verify file size after stream chunk completion
       const currentSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
       task.bytesDownloaded = currentSize;
 
@@ -258,7 +385,7 @@ async function executeServerDownload(id: string): Promise<void> {
       if (task.totalBytes === 0 && currentSize > 0) {
         task.totalBytes = currentSize;
       }
-      break; // Download complete!
+      break;
     } catch (err: any) {
       if (controller.signal.aborted) {
         task.status = "paused";
@@ -281,17 +408,24 @@ async function executeServerDownload(id: string): Promise<void> {
 }
 
 export function pauseServerDownload(id: string): boolean {
+  // Kill aria2c process if running
+  const child = activeProcesses.get(id);
+  if (child) {
+    child.kill("SIGINT");
+    activeProcesses.delete(id);
+  }
+
   const controller = abortControllers.get(id);
   if (controller) {
     controller.abort();
     abortControllers.delete(id);
-    const task = taskMap.get(id);
-    if (task) {
-      task.status = "paused";
-    }
-    return true;
   }
-  return false;
+
+  const task = taskMap.get(id);
+  if (task) {
+    task.status = "paused";
+  }
+  return true;
 }
 
 export function resumeServerDownload(id: string): boolean {

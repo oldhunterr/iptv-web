@@ -803,6 +803,11 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
                               <span className="uppercase px-1.5 py-0.2 bg-slate-950 border border-slate-800 text-cyan-400 rounded text-[10px] font-bold">
                                 {item.containerExtension}
                               </span>
+                              {(item as any).engineUsed === "aria2c" && (
+                                <span className="px-1.5 py-0.2 bg-purple-950/80 border border-purple-800 text-purple-300 rounded text-[10px] font-bold flex items-center gap-0.5">
+                                  <span>⚡ aria2c (8x)</span>
+                                </span>
+                              )}
                               <span>{downloadedMb} MB / {totalMb} MB</span>
                               {item.totalSegments && (
                                 <span>({item.downloadedSegments || 0}/{item.totalSegments} segments)</span>
