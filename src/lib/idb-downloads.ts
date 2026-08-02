@@ -104,3 +104,113 @@ export async function getStorageQuotaEstimate(): Promise<{
     usedPercent: 0,
   };
 }
+
+/**
+ * Starts a real HTTP fetch background stream worker for an offline download item.
+ * Streams response chunks, updates live progress, speed, and saves the final blob into IndexedDB.
+ */
+export async function startRealDownloadProcess(downloadId: string): Promise<void> {
+  const { getDownloadQueueState, saveDownloadQueueState } = await import("@/lib/profile-storage");
+  const { getStreamUrl } = await import("@/lib/api-client");
+
+  const queueState = getDownloadQueueState();
+  const itemIndex = queueState.items.findIndex((it) => it.id === downloadId);
+  if (itemIndex < 0) return;
+
+  const item = queueState.items[itemIndex];
+  const targetUrl = getStreamUrl("movies", item.streamId, item.containerExtension);
+
+  // Update item status to downloading
+  item.status = "downloading";
+  item.downloadSpeedBps = 0;
+  item.progressPercent = 0;
+  queueState.activeDownloadId = item.id;
+  queueState.isDownloading = true;
+  saveDownloadQueueState(queueState);
+
+  const startTime = Date.now();
+  let receivedBytes = 0;
+  const chunks: Uint8Array[] = [];
+
+  try {
+    const res = await fetch(targetUrl);
+    if (!res.ok || !res.body) {
+      throw new Error(`HTTP fetch failed with status ${res.status}`);
+    }
+
+    const contentLengthHeader = res.headers.get("content-length");
+    const totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : item.totalBytes || 100_000_000;
+    item.totalBytes = totalBytes;
+
+    const reader = res.body.getReader();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      if (value) {
+        chunks.push(value);
+        receivedBytes += value.byteLength;
+
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        const currentSpeedBps = elapsedTime > 0 ? Math.round(receivedBytes / elapsedTime) : 0;
+        const percent = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
+        const remainingBytes = Math.max(0, totalBytes - receivedBytes);
+        const etaSeconds = currentSpeedBps > 0 ? Math.round(remainingBytes / currentSpeedBps) : 0;
+
+        item.bytesDownloaded = receivedBytes;
+        item.progressPercent = percent;
+        item.downloadSpeedBps = currentSpeedBps;
+        item.etaSeconds = etaSeconds;
+
+        const latestState = getDownloadQueueState();
+        const idx = latestState.items.findIndex((it) => it.id === downloadId);
+        if (idx >= 0) {
+          latestState.items[idx] = { ...item };
+          latestState.globalSpeedBps = currentSpeedBps;
+          saveDownloadQueueState(latestState);
+        }
+      }
+    }
+
+    // Combine chunks into single Blob and persist in IndexedDB
+    const blob = new Blob(chunks, { type: `video/${item.containerExtension || "mp4"}` });
+    await saveOfflineMedia({
+      id: String(item.streamId),
+      streamId: item.streamId,
+      title: item.title,
+      blob,
+      mimeType: `video/${item.containerExtension || "mp4"}`,
+      sizeBytes: blob.size,
+      downloadedAt: Date.now(),
+    });
+
+    // Mark as completed
+    const finalState = getDownloadQueueState();
+    const finalIdx = finalState.items.findIndex((it) => it.id === downloadId);
+    if (finalIdx >= 0) {
+      finalState.items[finalIdx].status = "completed";
+      finalState.items[finalIdx].bytesDownloaded = blob.size;
+      finalState.items[finalIdx].totalBytes = blob.size;
+      finalState.items[finalIdx].progressPercent = 100;
+      finalState.items[finalIdx].downloadSpeedBps = 0;
+      finalState.items[finalIdx].etaSeconds = 0;
+      finalState.activeDownloadId = null;
+      finalState.isDownloading = false;
+      finalState.globalSpeedBps = 0;
+      saveDownloadQueueState(finalState);
+    }
+  } catch (err: any) {
+    console.error("Real download failed:", err);
+    const errState = getDownloadQueueState();
+    const errIdx = errState.items.findIndex((it) => it.id === downloadId);
+    if (errIdx >= 0) {
+      errState.items[errIdx].status = "failed";
+      errState.items[errIdx].errorReason = err.message || "Network error during download";
+      errState.activeDownloadId = null;
+      errState.isDownloading = false;
+      errState.globalSpeedBps = 0;
+      saveDownloadQueueState(errState);
+    }
+  }
+}

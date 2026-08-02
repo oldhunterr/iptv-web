@@ -415,7 +415,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                 </button>
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const queue = getDownloadQueueState();
                     const newId = `dl_${Date.now()}`;
                     const newItem: IDBDownloadItem = {
@@ -427,10 +427,10 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                       containerExtension: movie.container_extension || "mp4",
                       status: "queued",
                       bytesDownloaded: 0,
-                      totalBytes: 1500000000,
+                      totalBytes: 50000000,
                       progressPercent: 0,
                       downloadSpeedBps: 0,
-                      etaSeconds: 120,
+                      etaSeconds: 60,
                       downloadedAt: Date.now(),
                       expiresAt: Date.now() + 86400000 * 30,
                       xtreamCredentialsHash: "user_hash",
@@ -438,7 +438,9 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                     };
                     queue.items.push(newItem);
                     saveDownloadQueueState(queue);
-                    alert("Added to Offline Download Queue! Check Settings > Downloads.");
+
+                    const { startRealDownloadProcess } = await import("@/lib/idb-downloads");
+                    startRealDownloadProcess(newId);
                   }}
                   data-testid="movie-download-offline-button"
                   className="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 px-5 py-3.5 rounded-xl font-bold text-base transition-all hover:scale-105"
