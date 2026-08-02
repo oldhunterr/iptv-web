@@ -15,6 +15,7 @@ interface SearchFilterHeaderProps {
   isFilterOpen?: boolean;
   activeFilterCount?: number;
   onOpenSettings?: () => void;
+  onOpenProfiles?: () => void;
   activeProfile?: UserProfile;
 }
 
@@ -29,6 +30,8 @@ export const SearchFilterHeader: React.FC<SearchFilterHeaderProps> = ({
   isFilterOpen = false,
   activeFilterCount = 0,
   onOpenSettings,
+  onOpenProfiles,
+  activeProfile,
 }) => {
   return (
     <header
@@ -84,6 +87,24 @@ export const SearchFilterHeader: React.FC<SearchFilterHeaderProps> = ({
               <span className="w-4 h-4 rounded-full bg-accent-primary text-app font-bold text-[10px] flex items-center justify-center">
                 {activeFilterCount}
               </span>
+            )}
+          </button>
+        )}
+
+        {/* Profile Switcher Button */}
+        {onOpenProfiles && (
+          <button
+            onClick={onOpenProfiles}
+            data-testid="header-profile-button"
+            className="flex items-center gap-2 px-3 py-1.5 bg-surface hover:bg-surface-hover text-theme-primary text-xs font-semibold rounded-xl border border-border-subtle transition-all shrink-0 cursor-pointer shadow-sm"
+            title="Switch User Profile"
+          >
+            <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-white text-[10px] ${activeProfile?.isKids ? "bg-pink-500" : "bg-cyan-600"}`}>
+              {activeProfile?.isKids ? "👶" : (activeProfile?.name?.[0]?.toUpperCase() || "P")}
+            </div>
+            <span className="hidden sm:inline max-w-[80px] truncate">{activeProfile?.name || "Profile"}</span>
+            {activeProfile?.isKids && (
+              <span className="bg-pink-500/20 text-pink-400 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-pink-500/30 hidden md:inline">KIDS</span>
             )}
           </button>
         )}

@@ -461,6 +461,7 @@ export default function Home() {
             isFilterOpen={isFilterBarOpen}
             activeFilterCount={activeFilterCount}
             onOpenSettings={() => setActiveSection("settings")}
+            onOpenProfiles={() => setIsProfileModalOpen(true)}
             activeProfile={activeProfile}
           />
         )}
