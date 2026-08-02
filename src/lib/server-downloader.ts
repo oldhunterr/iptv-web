@@ -33,6 +33,59 @@ const activeProcesses = new Map<string, any>();
 
 let cachedAria2cAvailable: boolean | null = null;
 
+function getDownloadDir(): string {
+  const dir = path.join(process.cwd(), ".downloads");
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+function getTasksFilePath(): string {
+  return path.join(getDownloadDir(), "tasks.json");
+}
+
+function loadTasksFromDisk(): void {
+  try {
+    const tasksFile = getTasksFilePath();
+    if (fs.existsSync(tasksFile)) {
+      const raw = fs.readFileSync(tasksFile, "utf-8");
+      const tasks: ServerDownloadTask[] = JSON.parse(raw);
+      tasks.forEach((task) => {
+        if (task.filePath && fs.existsSync(task.filePath)) {
+          // If task was in progress when server restarted, set to paused
+          if (task.status === "downloading") {
+            task.status = "paused";
+            task.errorReason = "Server restarted";
+          }
+          taskMap.set(task.id, task);
+        } else if (task.status === "completed") {
+          task.status = "failed";
+          task.errorReason = "File missing from disk";
+          taskMap.set(task.id, task);
+        } else {
+          taskMap.set(task.id, task);
+        }
+      });
+    }
+  } catch (e) {
+    console.error("[ServerDownloader] Failed to load tasks from disk:", e);
+  }
+}
+
+export function saveTasksToDisk(): void {
+  try {
+    const tasksFile = getTasksFilePath();
+    const tasks = Array.from(taskMap.values());
+    fs.writeFileSync(tasksFile, JSON.stringify(tasks, null, 2), "utf-8");
+  } catch (e) {
+    console.error("[ServerDownloader] Failed to save tasks to disk:", e);
+  }
+}
+
+// Initial load of persisted tasks on server start
+loadTasksFromDisk();
+
 export function checkAria2cAvailable(): boolean {
   if (cachedAria2cAvailable !== null) return cachedAria2cAvailable;
   try {
@@ -42,14 +95,6 @@ export function checkAria2cAvailable(): boolean {
     cachedAria2cAvailable = false;
   }
   return cachedAria2cAvailable;
-}
-
-function getDownloadDir(): string {
-  const dir = path.join(process.cwd(), ".downloads");
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  return dir;
 }
 
 export function getAllServerDownloadTasks(): ServerDownloadTask[] {
@@ -88,6 +133,7 @@ export async function createServerDownloadTask(params: {
   };
 
   taskMap.set(id, task);
+  saveTasksToDisk();
 
   // Start download in background process
   executeServerDownload(id).catch((err) => {
@@ -281,14 +327,14 @@ function executeAria2cDownload(
           task.bytesDownloaded = fs.statSync(task.filePath).size;
           task.totalBytes = task.bytesDownloaded;
         }
-        resolve();
       } else if (task.status === "paused") {
-        resolve();
+        // Paused
       } else {
         task.status = "failed";
         task.errorReason = `aria2c process exited with code ${code}`;
-        resolve();
       }
+      saveTasksToDisk();
+      resolve();
     });
 
     child.on("error", (err) => {
@@ -423,6 +469,7 @@ export function pauseServerDownload(id: string): boolean {
   if (task) {
     task.status = "paused";
   }
+  saveTasksToDisk();
   return true;
 }
 
@@ -430,6 +477,7 @@ export function resumeServerDownload(id: string): boolean {
   const task = taskMap.get(id);
   if (task && (task.status === "paused" || task.status === "failed")) {
     task.status = "queued";
+    saveTasksToDisk();
     executeServerDownload(id).catch((err) => {
       console.error(`[ServerDownloader] Resume error for ${id}:`, err);
     });
@@ -446,5 +494,7 @@ export function deleteServerDownload(id: string): boolean {
       fs.unlinkSync(task.filePath);
     } catch {}
   }
-  return taskMap.delete(id);
+  const deleted = taskMap.delete(id);
+  saveTasksToDisk();
+  return deleted;
 }

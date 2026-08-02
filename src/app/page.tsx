@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { AppSection, Category, CatalogItem, Series, Episode, normalizeCatalogItem } from "@/types/iptv";
-import { UserProfile, ContentFilterOptions, isRatingAllowed } from "@/types/settings";
+import { UserProfile, ContentFilterOptions, isRatingAllowed, DownloadQueueState, IDBDownloadItem } from "@/types/settings";
 import {
   fetchLiveCategories,
   fetchLiveStreams,
@@ -23,6 +23,7 @@ import {
   getActiveProfile,
   subscribeProfileStorage,
   getDefaultFilterOptions,
+  getDownloadQueueState,
 } from "@/lib/profile-storage";
 
 import { CategorySidebar } from "@/components/catalog/CategorySidebar";
@@ -109,6 +110,50 @@ export default function Home() {
     const unsubscribe = subscribeStorage(refreshStorageData);
     return () => unsubscribe();
   }, [refreshStorageData]);
+
+  // Sync Download Queue State via SSE / API
+  const [downloadQueue, setDownloadQueue] = useState<DownloadQueueState>(getDownloadQueueState());
+
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource("/api/download?events=true");
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data.tasks)) {
+            const serverItems = data.tasks.map((st: any) => ({
+              id: st.id,
+              streamId: st.streamId,
+              section: st.type === "series" ? "series" : "movies",
+              title: st.title,
+              poster: st.poster,
+              containerExtension: st.containerExtension || "mp4",
+              status: st.status,
+              bytesDownloaded: st.bytesDownloaded,
+              totalBytes: st.totalBytes,
+              progressPercent: st.progressPercent,
+              downloadSpeedBps: st.downloadSpeedBps,
+              etaSeconds: st.etaSeconds,
+              downloadedAt: st.downloadedAt,
+              expiresAt: st.downloadedAt + 86400000 * 30,
+              xtreamCredentialsHash: "server",
+              retryCount: 0,
+            }));
+
+            setDownloadQueue((prev) => ({
+              ...prev,
+              items: serverItems,
+            }));
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, []);
 
   // Load Data based on active section
   const loadSectionData = useCallback(async (force = false) => {
