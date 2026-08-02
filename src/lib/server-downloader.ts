@@ -116,6 +116,58 @@ class ProgressTransform extends Transform {
   }
 }
 
+function fetchStreamWithRedirects(
+  targetUrl: string,
+  headers: Record<string, string>,
+  abortSignal: AbortSignal,
+  maxRedirects = 5
+): Promise<{ res: http.IncomingMessage; finalUrl: string }> {
+  return new Promise((resolve, reject) => {
+    if (maxRedirects <= 0) {
+      reject(new Error("Too many HTTP redirects from IPTV upstream server"));
+      return;
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(targetUrl);
+    } catch (e: any) {
+      reject(new Error(`Invalid redirect URL '${targetUrl}': ${e.message}`));
+      return;
+    }
+
+    const httpModule = parsedUrl.protocol === "https:" ? https : http;
+
+    const req = httpModule.get(
+      targetUrl,
+      { headers },
+      (res) => {
+        // Handle HTTP 301, 302, 303, 307, 308 Redirects
+        if (
+          res.statusCode &&
+          [301, 302, 303, 307, 308].includes(res.statusCode) &&
+          res.headers.location
+        ) {
+          const redirectTarget = new URL(res.headers.location, targetUrl).toString();
+          fetchStreamWithRedirects(redirectTarget, headers, abortSignal, maxRedirects - 1)
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        resolve({ res, finalUrl: targetUrl });
+      }
+    );
+
+    abortSignal.addEventListener("abort", () => {
+      req.destroy();
+      reject(new Error("Download paused by user"));
+    });
+
+    req.on("error", (err) => reject(err));
+  });
+}
+
 async function executeServerDownload(id: string): Promise<void> {
   const task = taskMap.get(id);
   if (!task) return;
@@ -132,49 +184,28 @@ async function executeServerDownload(id: string): Promise<void> {
   task.filePath = filePath;
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const parsedUrl = new URL(upstreamUrl);
-      const httpModule = parsedUrl.protocol === "https:" ? https : http;
+    const { res } = await fetchStreamWithRedirects(
+      upstreamUrl,
+      { "User-Agent": "VLC/3.0.18 LibVLC/3.0.18" },
+      controller.signal
+    );
 
-      const req = httpModule.get(
-        upstreamUrl,
-        {
-          headers: {
-            "User-Agent": "VLC/3.0.18 LibVLC/3.0.18",
-          },
-        },
-        (res) => {
-          if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-            reject(new Error(`Upstream server returned HTTP status ${res.statusCode}`));
-            return;
-          }
+    if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+      throw new Error(`Upstream server returned HTTP status ${res.statusCode}`);
+    }
 
-          const contentType = res.headers["content-type"] || "";
-          if (contentType.includes("application/json")) {
-            reject(new Error("Upstream stream returned JSON error response instead of video stream"));
-            return;
-          }
+    const contentType = res.headers["content-type"] || "";
+    if (contentType.includes("application/json")) {
+      throw new Error("Upstream stream returned JSON error response instead of video stream");
+    }
 
-          const contentLength = res.headers["content-length"];
-          task.totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+    const contentLength = res.headers["content-length"];
+    task.totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
 
-          const fileStream = fs.createWriteStream(filePath, { highWaterMark: 1024 * 1024 });
-          const progressStream = new ProgressTransform(id);
+    const fileStream = fs.createWriteStream(filePath, { highWaterMark: 1024 * 1024 });
+    const progressStream = new ProgressTransform(id);
 
-          controller.signal.addEventListener("abort", () => {
-            req.destroy();
-            fileStream.destroy();
-            reject(new Error("Download paused by user"));
-          });
-
-          pipeline(res, progressStream, fileStream)
-            .then(() => resolve())
-            .catch((err) => reject(err));
-        }
-      );
-
-      req.on("error", (err) => reject(err));
-    });
+    await pipeline(res, progressStream, fileStream);
 
     task.status = "completed";
     task.progressPercent = 100;
