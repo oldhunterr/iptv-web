@@ -52,10 +52,29 @@ export const SkipOverlay: React.FC<SkipOverlayProps> = ({
     const idType = tmdbId !== undefined && tmdbId !== null && String(tmdbId).trim() !== "" ? "tmdb" : "tvdb";
 
     if (idToUse !== undefined && season !== undefined && episode !== undefined) {
+      const cacheKey = `skip_timestamps_${idToUse}_s${season}e${episode}`;
+
+      // Check localStorage for offline cached skip timestamps
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setSkipData(parsed);
+          return;
+        }
+      } catch {}
+
       let isMounted = true;
       fetchSkipTimestamps(idToUse, season, episode, idType)
         .then((data) => {
-          if (isMounted) setSkipData(data);
+          if (isMounted) {
+            setSkipData(data);
+            if (data) {
+              try {
+                localStorage.setItem(cacheKey, JSON.stringify(data));
+              } catch {}
+            }
+          }
         })
         .catch(() => {
           if (isMounted) setSkipData(null);

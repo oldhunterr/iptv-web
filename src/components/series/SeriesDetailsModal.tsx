@@ -804,6 +804,8 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
                 seasonNum={selectedSeason}
                 seriesTitle={series.name}
                 poster={series.cover}
+                tmdbId={tmdbId || undefined}
+                tvdbId={tvdbId || undefined}
                 downloadedStreamIds={downloadedStreamIds}
                 onPlayEpisode={handlePlayEpisodeClick}
               />

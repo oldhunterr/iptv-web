@@ -4,6 +4,7 @@ import React from "react";
 import { Play, Check, Trash2, Download, HardDrive } from "lucide-react";
 import { Episode } from "@/types/iptv";
 import { getWatchProgress, removeFromHistory } from "@/lib/storage";
+import { fetchSkipTimestamps } from "@/lib/api-client";
 
 interface EpisodeListProps {
   episodes: Episode[];
@@ -11,6 +12,8 @@ interface EpisodeListProps {
   seasonNum: number;
   seriesTitle: string;
   poster?: string;
+  tvdbId?: string | number;
+  tmdbId?: string | number;
   downloadedStreamIds?: Set<string | number>;
   onPlayEpisode: (episode: Episode) => void;
 }
@@ -21,6 +24,8 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
   seasonNum,
   seriesTitle,
   poster,
+  tvdbId,
+  tmdbId,
   downloadedStreamIds,
   onPlayEpisode,
 }) => {
@@ -31,6 +36,19 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
     }${ep.episode_num} · ${ep.title || "Episode"}`;
     const containerExtension = ep.container_extension || "mp4";
     const thumbUrl = ep.info?.movie_image || ep.cover_big || poster;
+
+    // Pre-fetch & cache Skip Intro timestamps for offline playback
+    const idToUse = tmdbId !== undefined && tmdbId !== null && String(tmdbId).trim() !== "" ? tmdbId : tvdbId;
+    const idType = tmdbId !== undefined && tmdbId !== null && String(tmdbId).trim() !== "" ? "tmdb" : "tvdb";
+    if (idToUse !== undefined && seasonNum !== undefined && ep.episode_num !== undefined) {
+      fetchSkipTimestamps(idToUse, seasonNum, ep.episode_num, idType).then((data) => {
+        if (data) {
+          try {
+            localStorage.setItem(`skip_timestamps_${idToUse}_s${seasonNum}e${ep.episode_num}`, JSON.stringify(data));
+          } catch {}
+        }
+      }).catch(() => {});
+    }
 
     try {
       const res = await fetch("/api/download", {
