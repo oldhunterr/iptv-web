@@ -1,5 +1,9 @@
 import fs from "fs";
 import path from "path";
+import http from "http";
+import https from "https";
+import { Transform } from "stream";
+import { pipeline } from "stream/promises";
 import { buildUpstreamStreamUrl } from "@/lib/xtream-client";
 
 export interface ServerDownloadTask {
@@ -76,6 +80,42 @@ export async function createServerDownloadTask(params: {
   return task;
 }
 
+class ProgressTransform extends Transform {
+  private taskId: string;
+  private startTime: number;
+  private receivedBytes = 0;
+  private lastUpdate = 0;
+
+  constructor(taskId: string) {
+    super({ highWaterMark: 1024 * 1024 }); // 1MB highWaterMark buffer for maximum streaming speed
+    this.taskId = taskId;
+    this.startTime = Date.now();
+  }
+
+  _transform(chunk: any, encoding: string, callback: (err?: Error | null, data?: any) => void) {
+    this.receivedBytes += chunk.length;
+    const task = taskMap.get(this.taskId);
+    const now = Date.now();
+
+    // Throttle UI task metadata updates to every 250ms for maximum efficiency
+    if (task && now - this.lastUpdate > 250) {
+      this.lastUpdate = now;
+      const elapsedTime = (now - this.startTime) / 1000;
+      const currentSpeed = elapsedTime > 0 ? Math.round(this.receivedBytes / elapsedTime) : 0;
+      const percent = task.totalBytes > 0 ? Math.min(99, Math.round((this.receivedBytes / task.totalBytes) * 100)) : 0;
+      const remainingBytes = Math.max(0, task.totalBytes - this.receivedBytes);
+      const eta = currentSpeed > 0 ? Math.round(remainingBytes / currentSpeed) : 0;
+
+      task.bytesDownloaded = this.receivedBytes;
+      task.progressPercent = percent;
+      task.downloadSpeedBps = currentSpeed;
+      task.etaSeconds = eta;
+    }
+
+    callback(null, chunk);
+  }
+}
+
 async function executeServerDownload(id: string): Promise<void> {
   const task = taskMap.get(id);
   if (!task) return;
@@ -91,64 +131,57 @@ async function executeServerDownload(id: string): Promise<void> {
   const filePath = path.join(downloadDir, fileName);
   task.filePath = filePath;
 
-  const startTime = Date.now();
-  let receivedBytes = 0;
-
   try {
-    const response = await fetch(upstreamUrl, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "VLC/3.0.18 LibVLC/3.0.18",
-      },
+    await new Promise<void>((resolve, reject) => {
+      const parsedUrl = new URL(upstreamUrl);
+      const httpModule = parsedUrl.protocol === "https:" ? https : http;
+
+      const req = httpModule.get(
+        upstreamUrl,
+        {
+          headers: {
+            "User-Agent": "VLC/3.0.18 LibVLC/3.0.18",
+          },
+        },
+        (res) => {
+          if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+            reject(new Error(`Upstream server returned HTTP status ${res.statusCode}`));
+            return;
+          }
+
+          const contentType = res.headers["content-type"] || "";
+          if (contentType.includes("application/json")) {
+            reject(new Error("Upstream stream returned JSON error response instead of video stream"));
+            return;
+          }
+
+          const contentLength = res.headers["content-length"];
+          task.totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+          const fileStream = fs.createWriteStream(filePath, { highWaterMark: 1024 * 1024 });
+          const progressStream = new ProgressTransform(id);
+
+          controller.signal.addEventListener("abort", () => {
+            req.destroy();
+            fileStream.destroy();
+            reject(new Error("Download paused by user"));
+          });
+
+          pipeline(res, progressStream, fileStream)
+            .then(() => resolve())
+            .catch((err) => reject(err));
+        }
+      );
+
+      req.on("error", (err) => reject(err));
     });
-
-    if (!response.ok || !response.body) {
-      throw new Error(`Upstream server returned status ${response.status}`);
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      const json = await response.json().catch(() => null);
-      throw new Error(json?.error || "Upstream stream returned JSON error payload");
-    }
-
-    const contentLength = response.headers.get("content-length");
-    task.totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-
-    const fileStream = fs.createWriteStream(filePath);
-
-    // Read response body stream using Node/Web stream reader
-    const reader = (response.body as any).getReader();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      if (value) {
-        fileStream.write(Buffer.from(value));
-        receivedBytes += value.length;
-
-        const elapsedTime = (Date.now() - startTime) / 1000;
-        const currentSpeed = elapsedTime > 0 ? Math.round(receivedBytes / elapsedTime) : 0;
-        const percent = task.totalBytes > 0 ? Math.min(99, Math.round((receivedBytes / task.totalBytes) * 100)) : 0;
-        const remainingBytes = Math.max(0, task.totalBytes - receivedBytes);
-        const eta = currentSpeed > 0 ? Math.round(remainingBytes / currentSpeed) : 0;
-
-        task.bytesDownloaded = receivedBytes;
-        task.progressPercent = percent;
-        task.downloadSpeedBps = currentSpeed;
-        task.etaSeconds = eta;
-      }
-    }
-
-    fileStream.end();
 
     task.status = "completed";
     task.progressPercent = 100;
     task.downloadSpeedBps = 0;
     task.etaSeconds = 0;
-    if (task.totalBytes === 0) {
-      task.totalBytes = receivedBytes;
+    if (task.totalBytes === 0 && task.bytesDownloaded > 0) {
+      task.totalBytes = task.bytesDownloaded;
     }
   } catch (err: any) {
     if (controller.signal.aborted) {
@@ -159,7 +192,6 @@ async function executeServerDownload(id: string): Promise<void> {
       task.errorReason = err.message || "Server download failed";
       console.error(`[ServerDownloader] Task ${id} failed:`, err);
     }
-    // Clean up partial file if failed
     if (task.status === "failed" && fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);

@@ -116,13 +116,14 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
   };
 
   useEffect(() => {
-    let intervalId: any;
+    let eventSource: EventSource | null = null;
 
-    const pollServerDownloads = async () => {
-      try {
-        const res = await fetch("/api/download");
-        if (res.ok) {
-          const data = await res.json();
+    try {
+      eventSource = new EventSource("/api/download?events=true");
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
           if (Array.isArray(data.tasks)) {
             setDownloadQueue((prev) => {
               const serverItems: IDBDownloadItem[] = data.tasks.map((st: any) => ({
@@ -155,14 +156,15 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
               };
             });
           }
-        }
-      } catch {}
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
     };
-
-    pollServerDownloads();
-    intervalId = setInterval(pollServerDownloads, 1000);
-
-    return () => clearInterval(intervalId);
   }, []);
 
   const handleDeleteDownloadItem = async (id: string) => {
@@ -839,7 +841,7 @@ export const SettingsShell: React.FC<{ onClose?: () => void }> = () => {
                         <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                           {isCompleted && (
                             <a
-                              href={`/api/download/file?id=${item.id}`}
+                              href={`/api/download?file=true&id=${item.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               data-testid={`download-file-button-${item.id}`}
