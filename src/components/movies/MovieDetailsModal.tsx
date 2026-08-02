@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { X, Star, Heart, Play, Terminal } from "lucide-react";
+import { X, Star, Heart, Play, Terminal, Download } from "lucide-react";
 import { CatalogItem } from "@/types/iptv";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
 import { cleanTitle } from "@/lib/formatters";
-import { getUserLanguage } from "@/lib/profile-storage";
+import { getUserLanguage, getDownloadQueueState, saveDownloadQueueState } from "@/lib/profile-storage";
+import { IDBDownloadItem } from "@/types/settings";
 import { findBestMatch, generateArabicSearchVariants } from "@/lib/tmdb";
 import { MetadataAuditModal, MetadataAuditLog, RequestTraceItem } from "@/components/common/MetadataAuditModal";
 
@@ -404,13 +405,46 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                 </p>
               )}
               
-              <div className="mt-8 flex items-center gap-4">
+              <div className="mt-8 flex items-center gap-4 flex-wrap">
                 <button
                   onClick={() => onPlay(movie)}
                   className="flex items-center gap-2 bg-accent-primary hover:bg-accent-hover text-white px-8 py-3.5 rounded-xl font-bold text-lg transition-all shadow-lg hover:scale-105"
                 >
                   <Play className="w-6 h-6 fill-current" />
                   Play Movie
+                </button>
+
+                <button
+                  onClick={() => {
+                    const queue = getDownloadQueueState();
+                    const newId = `dl_${Date.now()}`;
+                    const newItem: IDBDownloadItem = {
+                      id: newId,
+                      streamId: movie.stream_id || movie.id || "movie",
+                      section: "movies",
+                      title: movie.name || movie.title || "Movie Download",
+                      poster: movie.stream_icon || movie.poster,
+                      containerExtension: movie.container_extension || "mp4",
+                      status: "queued",
+                      bytesDownloaded: 0,
+                      totalBytes: 1500000000,
+                      progressPercent: 0,
+                      downloadSpeedBps: 0,
+                      etaSeconds: 120,
+                      downloadedAt: Date.now(),
+                      expiresAt: Date.now() + 86400000 * 30,
+                      xtreamCredentialsHash: "user_hash",
+                      retryCount: 0,
+                    };
+                    queue.items.push(newItem);
+                    saveDownloadQueueState(queue);
+                    alert("Added to Offline Download Queue! Check Settings > Downloads.");
+                  }}
+                  data-testid="movie-download-offline-button"
+                  className="flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 px-5 py-3.5 rounded-xl font-bold text-base transition-all hover:scale-105"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Download Offline</span>
                 </button>
               </div>
             </div>
