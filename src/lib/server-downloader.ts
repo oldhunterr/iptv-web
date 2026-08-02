@@ -83,12 +83,15 @@ export async function createServerDownloadTask(params: {
 class ProgressTransform extends Transform {
   private taskId: string;
   private startTime: number;
-  private receivedBytes = 0;
+  private initialBytes: number;
+  private receivedBytes: number;
   private lastUpdate = 0;
 
-  constructor(taskId: string) {
+  constructor(taskId: string, initialBytes = 0) {
     super({ highWaterMark: 1024 * 1024 }); // 1MB highWaterMark buffer for maximum streaming speed
     this.taskId = taskId;
+    this.initialBytes = initialBytes;
+    this.receivedBytes = initialBytes;
     this.startTime = Date.now();
   }
 
@@ -101,7 +104,7 @@ class ProgressTransform extends Transform {
     if (task && now - this.lastUpdate > 250) {
       this.lastUpdate = now;
       const elapsedTime = (now - this.startTime) / 1000;
-      const currentSpeed = elapsedTime > 0 ? Math.round(this.receivedBytes / elapsedTime) : 0;
+      const currentSpeed = elapsedTime > 0 ? Math.round((this.receivedBytes - this.initialBytes) / elapsedTime) : 0;
       const percent = task.totalBytes > 0 ? Math.min(99, Math.round((this.receivedBytes / task.totalBytes) * 100)) : 0;
       const remainingBytes = Math.max(0, task.totalBytes - this.receivedBytes);
       const eta = currentSpeed > 0 ? Math.round(remainingBytes / currentSpeed) : 0;
@@ -183,54 +186,98 @@ async function executeServerDownload(id: string): Promise<void> {
   const filePath = path.join(downloadDir, fileName);
   task.filePath = filePath;
 
-  try {
-    const { res } = await fetchStreamWithRedirects(
-      upstreamUrl,
-      { "User-Agent": "VLC/3.0.18 LibVLC/3.0.18" },
-      controller.signal
-    );
+  const maxRetries = 10;
+  let attempt = 0;
 
-    if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-      throw new Error(`Upstream server returned HTTP status ${res.statusCode}`);
-    }
-
-    const contentType = res.headers["content-type"] || "";
-    if (contentType.includes("application/json")) {
-      throw new Error("Upstream stream returned JSON error response instead of video stream");
-    }
-
-    const contentLength = res.headers["content-length"];
-    task.totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-
-    const fileStream = fs.createWriteStream(filePath, { highWaterMark: 1024 * 1024 });
-    const progressStream = new ProgressTransform(id);
-
-    await pipeline(res, progressStream, fileStream);
-
-    task.status = "completed";
-    task.progressPercent = 100;
-    task.downloadSpeedBps = 0;
-    task.etaSeconds = 0;
-    if (task.totalBytes === 0 && task.bytesDownloaded > 0) {
-      task.totalBytes = task.bytesDownloaded;
-    }
-  } catch (err: any) {
+  while (attempt < maxRetries) {
+    attempt++;
     if (controller.signal.aborted) {
       task.status = "paused";
       task.errorReason = "Download paused by user";
-    } else {
-      task.status = "failed";
-      task.errorReason = err.message || "Server download failed";
-      console.error(`[ServerDownloader] Task ${id} failed:`, err);
+      abortControllers.delete(id);
+      return;
     }
-    if (task.status === "failed" && fs.existsSync(filePath)) {
+
+    let existingBytes = 0;
+    if (fs.existsSync(filePath)) {
       try {
-        fs.unlinkSync(filePath);
+        existingBytes = fs.statSync(filePath).size;
       } catch {}
     }
-  } finally {
-    abortControllers.delete(id);
+
+    const headers: Record<string, string> = {
+      "User-Agent": "VLC/3.0.18 LibVLC/3.0.18",
+    };
+
+    if (existingBytes > 0) {
+      headers["Range"] = `bytes=${existingBytes}-`;
+    }
+
+    try {
+      const { res } = await fetchStreamWithRedirects(upstreamUrl, headers, controller.signal);
+
+      if (res.statusCode && res.statusCode !== 200 && res.statusCode !== 206) {
+        throw new Error(`Upstream server returned HTTP status ${res.statusCode}`);
+      }
+
+      const contentType = res.headers["content-type"] || "";
+      if (contentType.includes("application/json")) {
+        throw new Error("Upstream stream returned JSON error response instead of video stream");
+      }
+
+      const contentLengthHeader = res.headers["content-length"];
+      const streamContentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+
+      if (res.statusCode === 206 && streamContentLength > 0) {
+        task.totalBytes = existingBytes + streamContentLength;
+      } else if (res.statusCode === 200 && streamContentLength > 0) {
+        task.totalBytes = streamContentLength;
+        existingBytes = 0; // Upstream doesn't support Range, start fresh
+      }
+
+      const writeFlags = existingBytes > 0 && res.statusCode === 206 ? "a" : "w";
+      const fileStream = fs.createWriteStream(filePath, { flags: writeFlags, highWaterMark: 1024 * 1024 });
+      const progressStream = new ProgressTransform(id, existingBytes);
+
+      await pipeline(res, progressStream, fileStream);
+
+      // Verify file size after stream chunk completion
+      const currentSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
+      task.bytesDownloaded = currentSize;
+
+      if (task.totalBytes > 0 && currentSize < task.totalBytes && attempt < maxRetries) {
+        console.warn(`[ServerDownloader] Stream ended early (${currentSize}/${task.totalBytes} bytes). Retrying attempt ${attempt + 1}...`);
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+
+      task.status = "completed";
+      task.progressPercent = 100;
+      task.downloadSpeedBps = 0;
+      task.etaSeconds = 0;
+      if (task.totalBytes === 0 && currentSize > 0) {
+        task.totalBytes = currentSize;
+      }
+      break; // Download complete!
+    } catch (err: any) {
+      if (controller.signal.aborted) {
+        task.status = "paused";
+        task.errorReason = "Download paused by user";
+        break;
+      }
+
+      console.warn(`[ServerDownloader] Task ${id} attempt ${attempt} error: ${err.message}`);
+      if (attempt < maxRetries) {
+        const backoffMs = Math.min(10000, attempt * 1500);
+        await new Promise((r) => setTimeout(r, backoffMs));
+      } else {
+        task.status = "failed";
+        task.errorReason = err.message || "Server download failed after multiple retries";
+      }
+    }
   }
+
+  abortControllers.delete(id);
 }
 
 export function pauseServerDownload(id: string): boolean {
