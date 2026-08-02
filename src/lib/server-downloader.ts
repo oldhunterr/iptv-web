@@ -209,6 +209,17 @@ async function executeServerDownload(id: string): Promise<void> {
   return executeNativeRangeDownload(id, upstreamUrl, filePath);
 }
 
+function parseAria2cSize(str: string): number {
+  if (!str) return 0;
+  const upper = str.trim().toUpperCase();
+  const num = parseFloat(upper);
+  if (isNaN(num)) return 0;
+  if (upper.includes("GIB") || upper.includes("GB")) return Math.round(num * 1024 * 1024 * 1024);
+  if (upper.includes("MIB") || upper.includes("MB")) return Math.round(num * 1024 * 1024);
+  if (upper.includes("KIB") || upper.includes("KB")) return Math.round(num * 1024);
+  return Math.round(num);
+}
+
 /**
  * aria2c Multi-Connection Downloader Process Executor
  */
@@ -243,31 +254,18 @@ function executeAria2cDownload(
       const line = data.toString();
       // Parse aria2c stdout line, e.g.:
       // [#12345 291MiB/1.6GiB(17%) CN:8 DL:15MiB ETA:1m20s]
-      const match = line.match(/\((\d+)%\)\s+CN:\d+\s+DL:([0-9.]+\s*[KMG]?i?B?)\s+ETA:(?:(\d+m)?(\d+s)?)?/i);
+      const match = line.match(/([0-9.]+\s*[KMG]?i?B)\/([0-9.]+\s*[KMG]?i?B)\((\d+)%\).*?DL:([0-9.]+\s*[KMG]?i?B)/i);
       if (match && task) {
-        task.progressPercent = parseInt(match[1], 10);
+        task.bytesDownloaded = parseAria2cSize(match[1]);
+        task.totalBytes = parseAria2cSize(match[2]);
+        task.progressPercent = parseInt(match[3], 10);
+        task.downloadSpeedBps = parseAria2cSize(match[4]);
 
-        // Parse speed string (e.g. 15MiB, 1.2MiB, 800KiB)
-        const speedStr = match[2].trim().toUpperCase();
-        let speedBps = 0;
-        if (speedStr.includes("GIB") || speedStr.includes("GB")) {
-          speedBps = parseFloat(speedStr) * 1024 * 1024 * 1024;
-        } else if (speedStr.includes("MIB") || speedStr.includes("MB")) {
-          speedBps = parseFloat(speedStr) * 1024 * 1024;
-        } else if (speedStr.includes("KIB") || speedStr.includes("KB")) {
-          speedBps = parseFloat(speedStr) * 1024;
-        } else {
-          speedBps = parseFloat(speedStr);
-        }
-        task.downloadSpeedBps = Math.round(speedBps);
-
-        // Update file size & downloaded bytes
-        if (task.filePath && fs.existsSync(task.filePath)) {
-          const currentSize = fs.statSync(task.filePath).size;
-          task.bytesDownloaded = currentSize;
-          if (task.progressPercent > 0) {
-            task.totalBytes = Math.round((currentSize / task.progressPercent) * 100);
-          }
+        const etaMatch = line.match(/ETA:(?:(\d+)m)?(?:(\d+)s)?/i);
+        if (etaMatch) {
+          const mins = parseInt(etaMatch[1] || "0", 10);
+          const secs = parseInt(etaMatch[2] || "0", 10);
+          task.etaSeconds = mins * 60 + secs;
         }
       }
     });

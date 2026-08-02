@@ -388,7 +388,15 @@ export default function Home() {
   const handlePlayMovie = (item: CatalogItem) => {
     const sId = item.stream_id ?? item.id;
     const ext = item.container_extension || "mp4";
-    const url = getStreamUrl("movie", sId, ext);
+
+    const completedTask = downloadQueue.items.find(
+      (it) => String(it.streamId) === String(sId) && it.status === "completed"
+    );
+
+    const url = completedTask
+      ? `/api/download?file=true&id=${completedTask.id}`
+      : getStreamUrl("movie", sId, ext);
+
     setPlayingMedia({
       src: url,
       title: item.name || item.title || "Movie",
@@ -404,7 +412,15 @@ export default function Home() {
 
   const handlePlayEpisode = (series: Series, seasonNum: number, episode: Episode) => {
     const ext = episode.container_extension || "mp4";
-    const url = getStreamUrl("series", episode.id, ext);
+    
+    const completedTask = downloadQueue.items.find(
+      (it) => String(it.streamId) === String(episode.id) && it.status === "completed"
+    );
+
+    const url = completedTask
+      ? `/api/download?file=true&id=${completedTask.id}`
+      : getStreamUrl("series", episode.id, ext);
+
     const itemKey = `series_${series.series_id}_s${seasonNum}e${episode.episode_num}_${episode.id}`;
 
     setPlayingMedia({
