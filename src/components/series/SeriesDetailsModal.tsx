@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { X, Star, Volume2, VolumeX, Heart, Loader2, Terminal } from "lucide-react";
+import { X, Star, Volume2, VolumeX, Heart, Loader2, Terminal, Download } from "lucide-react";
 import { Series, SeriesInfo, Episode, normalizeCatalogItem } from "@/types/iptv";
 import { fetchSeriesInfo, getThemeAudioUrl } from "@/lib/api-client";
 import { isFavorite, toggleFavorite } from "@/lib/storage";
@@ -772,24 +772,72 @@ export const SeriesDetailsModal: React.FC<SeriesDetailsModalProps> = ({
             <div className="flex items-center justify-between gap-4 border-b border-border-subtle/60 pb-4 mb-6">
               <h3 className="text-2xl font-bold text-white">Episodes</h3>
 
-              {seasonsList.length > 1 ? (
-                <select
-                  value={selectedSeason}
-                  onChange={(e) => setSelectedSeason(Number(e.target.value))}
-                  data-testid="season-select"
-                  className="bg-surface text-base font-medium text-theme-primary border border-border-subtle rounded-xl px-4 py-2 focus:outline-none focus:border-accent-primary cursor-pointer shadow-lg"
-                >
-                  {seasonsList.map((sNum) => (
-                    <option key={sNum} value={sNum}>
-                      {sNum === 0 ? "Specials" : `Season ${sNum}`}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-sm text-theme-muted font-medium px-4 py-2 bg-surface rounded-xl border border-border-subtle">
-                  {selectedSeason === 0 ? "Specials" : `Season ${selectedSeason}`}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {seasonEpisodes.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      if (!seasonEpisodes || seasonEpisodes.length === 0 || !series) return;
+                      const count = seasonEpisodes.length;
+                      if (!confirm(`Queue downloads for all ${count} episodes of Season ${selectedSeason}?`)) return;
+
+                      let started = 0;
+                      for (const ep of seasonEpisodes) {
+                        const streamId = ep.id;
+                        const title = `${series.name} — S${selectedSeason < 10 ? "0" : ""}${selectedSeason}E${
+                          ep.episode_num < 10 ? "0" : ""
+                        }${ep.episode_num} · ${ep.title || "Episode"}`;
+                        const containerExtension = ep.container_extension || "mp4";
+                        const thumbUrl = ep.info?.movie_image || ep.cover_big || series.cover;
+
+                        try {
+                          const res = await fetch("/api/download", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              action: "start",
+                              streamId,
+                              type: "series",
+                              title,
+                              seriesTitle: series.name,
+                              seasonNum: selectedSeason,
+                              episodeNum: ep.episode_num,
+                              containerExtension,
+                              poster: thumbUrl,
+                            }),
+                          });
+                          if (res.ok) started++;
+                        } catch {}
+                      }
+
+                      alert(`Queued ${started}/${count} episode downloads for Season ${selectedSeason}! Check Settings > Downloads for progress.`);
+                    }}
+                    data-testid="download-season-button"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-400 text-xs font-bold rounded-xl transition-all hover:scale-105 shadow-md"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Season ({seasonEpisodes.length})</span>
+                  </button>
+                )}
+
+                {seasonsList.length > 1 ? (
+                  <select
+                    value={selectedSeason}
+                    onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                    data-testid="season-select"
+                    className="bg-surface text-base font-medium text-theme-primary border border-border-subtle rounded-xl px-4 py-2 focus:outline-none focus:border-accent-primary cursor-pointer shadow-lg"
+                  >
+                    {seasonsList.map((sNum) => (
+                      <option key={sNum} value={sNum}>
+                        {sNum === 0 ? "Specials" : `Season ${sNum}`}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-sm text-theme-muted font-medium px-4 py-2 bg-surface rounded-xl border border-border-subtle">
+                    {selectedSeason === 0 ? "Specials" : `Season ${selectedSeason}`}
+                  </span>
+                )}
+              </div>
             </div>
 
             {loading ? (

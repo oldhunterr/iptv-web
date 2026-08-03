@@ -12,6 +12,9 @@ export interface ServerDownloadTask {
   streamId: string | number;
   type: "movie" | "series" | "live";
   title: string;
+  seriesTitle?: string;
+  seasonNum?: number;
+  episodeNum?: number;
   containerExtension: string;
   poster?: string;
   status: "queued" | "downloading" | "paused" | "completed" | "failed";
@@ -33,12 +36,45 @@ const activeProcesses = new Map<string, any>();
 
 let cachedAria2cAvailable: boolean | null = null;
 
+function sanitizeFileName(str: string): string {
+  return str.replace(/[\\/:*?"<>|]/g, "").trim();
+}
+
 function getDownloadDir(): string {
   const dir = path.join(process.cwd(), ".downloads");
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   return dir;
+}
+
+export function buildStructuredTaskPath(params: {
+  type: "movie" | "series" | "live";
+  title: string;
+  containerExtension: string;
+  seriesTitle?: string;
+  seasonNum?: number;
+  episodeNum?: number;
+}): { dir: string; fileName: string; fullPath: string } {
+  const baseDir = getDownloadDir();
+  const ext = params.containerExtension || "mp4";
+
+  if (params.type === "movie") {
+    const movieFolder = sanitizeFileName(params.title);
+    const dir = path.join(baseDir, "Movies", movieFolder);
+    const fileName = `${movieFolder}.${ext}`;
+    return { dir, fileName, fullPath: path.join(dir, fileName) };
+  } else if (params.type === "series") {
+    const seriesFolder = sanitizeFileName(params.seriesTitle || params.title.split(" — ")[0] || "TV Series");
+    const seasonFolder = `Season ${String(params.seasonNum || 1).padStart(2, "0")}`;
+    const dir = path.join(baseDir, "TV Shows", seriesFolder, seasonFolder);
+    const fileName = `${sanitizeFileName(params.title)}.${ext}`;
+    return { dir, fileName, fullPath: path.join(dir, fileName) };
+  } else {
+    const dir = path.join(baseDir, "Live TV");
+    const fileName = `${sanitizeFileName(params.title)}.${ext}`;
+    return { dir, fileName, fullPath: path.join(dir, fileName) };
+  }
 }
 
 function getTasksFilePath(): string {
@@ -53,7 +89,6 @@ function loadTasksFromDisk(): void {
       const tasks: ServerDownloadTask[] = JSON.parse(raw);
       tasks.forEach((task) => {
         if (task.filePath && fs.existsSync(task.filePath)) {
-          // If task was in progress when server restarted, set to paused
           if (task.status === "downloading") {
             task.status = "paused";
             task.errorReason = "Server restarted";
@@ -109,6 +144,9 @@ export async function createServerDownloadTask(params: {
   streamId: string | number;
   type: "movie" | "series" | "live";
   title: string;
+  seriesTitle?: string;
+  seasonNum?: number;
+  episodeNum?: number;
   containerExtension?: string;
   poster?: string;
 }): Promise<ServerDownloadTask> {
@@ -120,6 +158,9 @@ export async function createServerDownloadTask(params: {
     streamId: params.streamId,
     type: params.type,
     title: params.title,
+    seriesTitle: params.seriesTitle,
+    seasonNum: params.seasonNum,
+    episodeNum: params.episodeNum,
     containerExtension: ext,
     poster: params.poster,
     status: "queued",
@@ -241,9 +282,20 @@ async function executeServerDownload(id: string): Promise<void> {
   if (!task) return;
 
   const upstreamUrl = buildUpstreamStreamUrl(task.type, String(task.streamId), task.containerExtension);
-  const downloadDir = getDownloadDir();
-  const fileName = `${id}.${task.containerExtension}`;
-  const filePath = path.join(downloadDir, fileName);
+  
+  const { dir: downloadDir, fileName, fullPath: filePath } = buildStructuredTaskPath({
+    type: task.type,
+    title: task.title,
+    containerExtension: task.containerExtension,
+    seriesTitle: task.seriesTitle,
+    seasonNum: task.seasonNum,
+    episodeNum: task.episodeNum,
+  });
+
+  if (!fs.existsSync(downloadDir)) {
+    fs.mkdirSync(downloadDir, { recursive: true });
+  }
+
   task.filePath = filePath;
 
   if (checkAria2cAvailable()) {
@@ -298,8 +350,6 @@ function executeAria2cDownload(
 
     child.stdout.on("data", (data: Buffer) => {
       const line = data.toString();
-      // Parse aria2c stdout line, e.g.:
-      // [#12345 291MiB/1.6GiB(17%) CN:8 DL:15MiB ETA:1m20s]
       const match = line.match(/([0-9.]+\s*[KMG]?i?B)\/([0-9.]+\s*[KMG]?i?B)\((\d+)%\).*?DL:([0-9.]+\s*[KMG]?i?B)/i);
       if (match && task) {
         task.bytesDownloaded = parseAria2cSize(match[1]);
@@ -340,7 +390,6 @@ function executeAria2cDownload(
     child.on("error", (err) => {
       activeProcesses.delete(id);
       console.warn(`[ServerDownloader] aria2c process error: ${err.message}. Falling back to native downloader.`);
-      // Fallback to native Range downloader
       executeNativeRangeDownload(id, upstreamUrl, task.filePath!).then(resolve).catch(reject);
     });
   });
@@ -452,7 +501,6 @@ async function executeNativeRangeDownload(id: string, upstreamUrl: string, fileP
 }
 
 export function pauseServerDownload(id: string): boolean {
-  // Kill aria2c process if running
   const child = activeProcesses.get(id);
   if (child) {
     child.kill("SIGINT");

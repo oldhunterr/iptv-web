@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, streamId, type, title, containerExtension, poster, id } = body;
+    const { action, streamId, type, title, seriesTitle, seasonNum, episodeNum, containerExtension, poster, id } = body;
 
     if (action === "start") {
       if (!streamId || !type || !title) {
@@ -129,8 +129,11 @@ export async function POST(request: NextRequest) {
 
       const task = await createServerDownloadTask({
         streamId,
-        type: type === "series" ? "series" : type === "live" ? "live" : "movie",
+        type,
         title,
+        seriesTitle,
+        seasonNum,
+        episodeNum,
         containerExtension,
         poster,
       });
